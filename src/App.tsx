@@ -1,0 +1,122 @@
+import React, { useState, useEffect } from 'react';
+import LandingPage from './components/LandingPage';
+import Sidebar from './components/Sidebar';
+import Header from './components/Header';
+import Dashboard from './components/Dashboard';
+import ResearchLibrary from './components/ResearchLibrary';
+import PaperViewer from './components/PaperViewer';
+import Analytics from './components/Analytics';
+import SettingsPage from './components/Settings';
+import Profile from './components/Profile';
+import { User } from './types';
+
+export default function App() {
+  const [user, setUser] = useState<User | null>(null);
+  const [activeTab, setActiveTab] = useState<string>('dashboard');
+  const [activePaperId, setActivePaperId] = useState<string | null>(null);
+
+  // Check if session exists in localStorage on mount
+  useEffect(() => {
+    const savedUser = localStorage.getItem('researchmind_user');
+    if (savedUser) {
+      try {
+        setUser(JSON.parse(savedUser));
+      } catch (err) {
+        console.error('Stale user session', err);
+      }
+    }
+  }, []);
+
+  const handleLoginSuccess = (loggedInUser: User) => {
+    setUser(loggedInUser);
+    localStorage.setItem('researchmind_user', JSON.stringify(loggedInUser));
+  };
+
+  const handleLogout = () => {
+    setUser(null);
+    localStorage.removeItem('researchmind_user');
+    setActivePaperId(null);
+    setActiveTab('dashboard');
+  };
+
+  const handleNavigateToTab = (tab: string) => {
+    setActiveTab(tab);
+  };
+
+  const handleOpenPaper = (paperId: string) => {
+    setActivePaperId(paperId);
+    setActiveTab('workspace');
+  };
+
+  const handleStartComparativeChat = async () => {
+    setActivePaperId('all');
+    setActiveTab('workspace');
+  };
+
+  // Render authenticating screen
+  if (!user) {
+    return <LandingPage onLoginSuccess={handleLoginSuccess} />;
+  }
+
+  return (
+    <div className="flex h-screen overflow-hidden bg-slate-50 text-slate-900 font-sans" id="app_frame_container">
+      {/* PERSISTENT SIDEBAR */}
+      <Sidebar 
+        activeTab={activeTab} 
+        setActiveTab={handleNavigateToTab} 
+        user={user} 
+        onLogout={handleLogout}
+      />
+
+      {/* RIGHT WORKSPACE INTERFACE */}
+      <div className="flex-1 flex flex-col overflow-hidden" id="workspace_right_column">
+        {/* UNIFIED TOP CONTEXT HEADER */}
+        <Header activeTab={activeTab} user={user} />
+
+        {/* DETAILED CONTENT VIEWS */}
+        <main className="flex-1 overflow-y-auto bg-slate-50/50" id="main_content_pane">
+          {activeTab === 'dashboard' && (
+            <Dashboard 
+              user={user} 
+              onOpenPaper={handleOpenPaper} 
+              onNavigateToTab={handleNavigateToTab} 
+            />
+          )}
+
+          {activeTab === 'library' && (
+            <ResearchLibrary 
+              user={user} 
+              onOpenPaper={handleOpenPaper} 
+              onNavigateToTab={handleNavigateToTab}
+              onStartComparativeChat={handleStartComparativeChat}
+            />
+          )}
+
+          {activeTab === 'workspace' && (
+            <PaperViewer
+              paperId={activePaperId}
+              onBackToLibrary={() => setActivePaperId(null)}
+              userId={user.id}
+              onSelectPaper={handleOpenPaper}
+            />
+          )}
+
+          {activeTab === 'analytics' && (
+            <Analytics />
+          )}
+
+          {activeTab === 'profile' && (
+            <Profile 
+              user={user}
+              onOpenPaper={handleOpenPaper}
+            />
+          )}
+
+          {activeTab === 'settings' && (
+            <SettingsPage />
+          )}
+        </main>
+      </div>
+    </div>
+  );
+}
