@@ -31,6 +31,23 @@ function getGeminiClient(): GoogleGenAI {
 const app = express();
 const PORT = 3000;
 
+// Global Async Error Wrapper Patch for Express 4.x to ensure JSON error responses
+const methods = ['get', 'post', 'put', 'delete', 'patch'] as const;
+for (const method of methods) {
+  const original = (app as any)[method];
+  (app as any)[method] = function (path: any, ...handlers: any[]) {
+    const wrappedHandlers = handlers.map(handler => {
+      if (typeof handler === 'function') {
+        return (req: Request, res: Response, next: any) => {
+          Promise.resolve(handler(req, res, next)).catch(next);
+        };
+      }
+      return handler;
+    });
+    return original.call(this, path, ...wrappedHandlers);
+  };
+}
+
 // CORS headers middleware
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -39,6 +56,44 @@ app.use((req, res, next) => {
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
+  next();
+});
+
+// Helper to derive code from error string
+function deriveErrorCode(msg: string): string {
+  const m = msg.toLowerCase();
+  if (m.includes('not found')) return 'NotFound';
+  if (m.includes('invalid') || m.includes('auth')) return 'InvalidCredentials';
+  if (m.includes('already exists') || m.includes('duplicate')) return 'AlreadyExists';
+  if (m.includes('required') || m.includes('missing')) return 'BadRequest';
+  if (m.includes('unauthorized') || m.includes('permission') || m.includes('denied')) return 'Unauthorized';
+  if (m.includes('gemini') || m.includes('ai')) return 'AiIntegrationError';
+  return 'InternalServerError';
+}
+
+// Unified Error Formatting Middleware to guarantee JSON format for all non-2xx API responses
+app.use((req, res, next) => {
+  const originalJson = res.json;
+  res.json = function (data: any) {
+    if (res.statusCode >= 400) {
+      const errMsg = (data && typeof data === 'object')
+        ? (data.error || data.message || 'An unexpected server error occurred')
+        : (typeof data === 'string' ? data : 'An unexpected server error occurred');
+      
+      const errCode = (data && typeof data === 'object' && (data.errorCode || data.code))
+        ? (data.errorCode || data.code)
+        : deriveErrorCode(errMsg);
+
+      return originalJson.call(this, {
+        success: false,
+        message: errMsg,
+        error: errMsg, // Backward compatible for existing frontend component expectations
+        code: errCode, // Pure error code matching requirements
+        errorCode: errCode
+      });
+    }
+    return originalJson.call(this, data);
+  };
   next();
 });
 
