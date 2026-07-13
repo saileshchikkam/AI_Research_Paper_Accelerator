@@ -1,6 +1,5 @@
 import express, { Request, Response } from 'express';
 import path from 'path';
-import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, Type } from '@google/genai';
 import { db } from './server-db';
 import { 
@@ -970,6 +969,25 @@ app.get('/api/help', async (req: Request, res: Response) => {
   });
 });
 
+// Catch-all 404 for API routes
+app.use('/api/*', (req: Request, res: Response) => {
+  res.status(404).json({
+    success: false,
+    message: `API route not found: ${req.originalUrl || req.url}`,
+    error: 'RouteNotFound'
+  });
+});
+
+// Catch-all Express Error Handler
+app.use((err: any, req: Request, res: Response, next: any) => {
+  console.error("Global express error:", err);
+  res.status(err.status || err.statusCode || 500).json({
+    success: false,
+    message: err.message || "An unexpected serverless function error occurred.",
+    error: String(err.stack || err)
+  });
+});
+
 // Export the Express app for Vercel Serverless Functions
 export { app };
 
@@ -982,6 +1000,7 @@ async function startServer() {
 
   // --- VITE MIDDLEWARE & STATIC SERVING ---
   if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
