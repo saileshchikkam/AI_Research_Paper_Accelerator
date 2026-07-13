@@ -1,5 +1,10 @@
 import fs from 'fs';
 import path from 'path';
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { 
+  getFirestore, doc, setDoc, getDoc, getDocs, collection, 
+  deleteDoc, query, where, limit 
+} from 'firebase/firestore';
 import { 
   User, Paper, Folder, ChatSession, Note, Flashcard, 
   Quiz, LiteratureReview, SavedCitation, StudyActivity, DashboardMetrics 
@@ -11,6 +16,33 @@ const DB_FILE = path.join(process.cwd(), 'src', 'db.json');
 const dbDir = path.dirname(DB_FILE);
 if (!fs.existsSync(dbDir)) {
   fs.mkdirSync(dbDir, { recursive: true });
+}
+
+// Parse environment variables with priority on Firebase config
+const firebaseConfig = {
+  apiKey: process.env.VITE_FIREBASE_API_KEY || process.env.FIREBASE_API_KEY,
+  authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN || process.env.FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID,
+  storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET || process.env.FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || process.env.FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.VITE_FIREBASE_APP_ID || process.env.FIREBASE_APP_ID,
+};
+
+const isFirebaseConfigured = !!firebaseConfig.apiKey;
+
+let firebaseApp: any = null;
+let firestoreDb: any = null;
+
+if (isFirebaseConfigured) {
+  try {
+    firebaseApp = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+    firestoreDb = getFirestore(firebaseApp);
+    console.log("Firebase App initialized successfully on server-db.");
+  } catch (err: any) {
+    console.error("Firebase App initialization failed on server-db:", err.message || err);
+  }
+} else {
+  console.warn("Firebase config is missing or incomplete. Using local db.json fallback.");
 }
 
 // Initial Seeding Data
@@ -485,6 +517,12 @@ class ServerDatabase {
 
   constructor() {
     this.db = this.load();
+    if (isFirebaseConfigured) {
+      console.log("Firebase detected. Initializing seeding...");
+      this.seedFirestoreIfNeeded().catch(err => {
+        console.error("Failed to seed Firestore:", err);
+      });
+    }
   }
 
   private load(): DB {
@@ -521,35 +559,135 @@ class ServerDatabase {
     this.saveData(this.db);
   }
 
+  // Seeding helper
+  async seedFirestoreIfNeeded() {
+    if (!firestoreDb) return;
+    try {
+      const papersSnap = await getDocs(collection(firestoreDb, 'papers'));
+      if (papersSnap.empty) {
+        console.log("Firestore collections are empty. Performing full seeding...");
+        
+        for (const u of INITIAL_USERS) {
+          await setDoc(doc(firestoreDb, 'users', u.id), u);
+        }
+        for (const f of INITIAL_FOLDERS) {
+          await setDoc(doc(firestoreDb, 'folders', f.id), f);
+        }
+        for (const p of INITIAL_PAPERS) {
+          await setDoc(doc(firestoreDb, 'papers', p.id), p);
+        }
+        for (const n of INITIAL_NOTES) {
+          await setDoc(doc(firestoreDb, 'notes', n.id), n);
+        }
+        for (const fc of INITIAL_FLASHCARDS) {
+          await setDoc(doc(firestoreDb, 'flashcards', fc.id), fc);
+        }
+        for (const q of INITIAL_QUIZZES) {
+          await setDoc(doc(firestoreDb, 'quizzes', q.id), q);
+        }
+        for (const lr of INITIAL_LITERATURE_REVIEWS) {
+          await setDoc(doc(firestoreDb, 'literatureReviews', lr.id), lr);
+        }
+        for (const sc of INITIAL_SAVED_CITATIONS) {
+          await setDoc(doc(firestoreDb, 'savedCitations', sc.id), sc);
+        }
+        for (const sa of INITIAL_STUDY_ACTIVITIES) {
+          await setDoc(doc(firestoreDb, 'activities', sa.id), sa);
+        }
+        
+        console.log("Firestore database seeded successfully.");
+      }
+    } catch (err: any) {
+      console.error("Firestore Seeding failed:", err.message || err);
+    }
+  }
+
   // Auth Operations
-  getUsers(): User[] {
+  async getUsers(): Promise<User[]> {
+    if (firestoreDb) {
+      try {
+        const snap = await getDocs(collection(firestoreDb, 'users'));
+        return snap.docs.map(doc => doc.data() as User);
+      } catch (err: any) {
+        console.error("Firestore getUsers error:", err.message);
+      }
+    }
     return this.db.users;
   }
 
-  getUser(id: string): User | undefined {
+  async getUser(id: string): Promise<User | undefined> {
+    if (firestoreDb) {
+      try {
+        const snap = await getDoc(doc(firestoreDb, 'users', id));
+        if (snap.exists()) {
+          return snap.data() as User;
+        }
+      } catch (err: any) {
+        console.error("Firestore getUser error:", err.message);
+      }
+    }
     return this.db.users.find(u => u.id === id);
   }
 
-  createUser(user: User): User {
+  async createUser(user: User): Promise<User> {
+    if (firestoreDb) {
+      try {
+        await setDoc(doc(firestoreDb, 'users', user.id), user);
+        return user;
+      } catch (err: any) {
+        console.error("Firestore createUser error:", err.message);
+      }
+    }
     this.db.users.push(user);
     this.persist();
     return user;
   }
 
   // Folder Operations
-  getFolders(): Folder[] {
+  async getFolders(): Promise<Folder[]> {
+    if (firestoreDb) {
+      try {
+        const snap = await getDocs(collection(firestoreDb, 'folders'));
+        return snap.docs.map(doc => doc.data() as Folder);
+      } catch (err: any) {
+        console.error("Firestore getFolders error:", err.message);
+      }
+    }
     return this.db.folders;
   }
 
-  createFolder(folder: Folder): Folder {
+  async createFolder(folder: Folder): Promise<Folder> {
+    if (firestoreDb) {
+      try {
+        await setDoc(doc(firestoreDb, 'folders', folder.id), folder);
+        return folder;
+      } catch (err: any) {
+        console.error("Firestore createFolder error:", err.message);
+      }
+    }
     this.db.folders.push(folder);
     this.persist();
     return folder;
   }
 
-  deleteFolder(id: string) {
+  async deleteFolder(id: string): Promise<void> {
+    if (firestoreDb) {
+      try {
+        await deleteDoc(doc(firestoreDb, 'folders', id));
+        // Unassign paper folders in firestore
+        const papersSnap = await getDocs(collection(firestoreDb, 'papers'));
+        for (const paperDoc of papersSnap.docs) {
+          const p = paperDoc.data() as Paper;
+          if (p.folderId === id) {
+            await setDoc(doc(firestoreDb, 'papers', p.id), { ...p, folderId: null });
+          }
+        }
+        return;
+      } catch (err: any) {
+        console.error("Firestore deleteFolder error:", err.message);
+      }
+    }
     this.db.folders = this.db.folders.filter(f => f.id !== id);
-    // Unassign paper folders
     this.db.papers.forEach(p => {
       if (p.folderId === id) {
         p.folderId = null;
@@ -559,21 +697,59 @@ class ServerDatabase {
   }
 
   // Paper Operations
-  getPapers(): Paper[] {
+  async getPapers(): Promise<Paper[]> {
+    if (firestoreDb) {
+      try {
+        const snap = await getDocs(collection(firestoreDb, 'papers'));
+        return snap.docs.map(doc => doc.data() as Paper);
+      } catch (err: any) {
+        console.error("Firestore getPapers error:", err.message);
+      }
+    }
     return this.db.papers;
   }
 
-  getPaper(id: string): Paper | undefined {
+  async getPaper(id: string): Promise<Paper | undefined> {
+    if (firestoreDb) {
+      try {
+        const snap = await getDoc(doc(firestoreDb, 'papers', id));
+        if (snap.exists()) {
+          return snap.data() as Paper;
+        }
+      } catch (err: any) {
+        console.error("Firestore getPaper error:", err.message);
+      }
+    }
     return this.db.papers.find(p => p.id === id);
   }
 
-  createPaper(paper: Paper): Paper {
+  async createPaper(paper: Paper): Promise<Paper> {
+    if (firestoreDb) {
+      try {
+        await setDoc(doc(firestoreDb, 'papers', paper.id), paper);
+        return paper;
+      } catch (err: any) {
+        console.error("Firestore createPaper error:", err.message);
+      }
+    }
     this.db.papers.push(paper);
     this.persist();
     return paper;
   }
 
-  updatePaper(id: string, updates: Partial<Paper>): Paper | undefined {
+  async updatePaper(id: string, updates: Partial<Paper>): Promise<Paper | undefined> {
+    if (firestoreDb) {
+      try {
+        const snap = await getDoc(doc(firestoreDb, 'papers', id));
+        if (snap.exists()) {
+          const paper = { ...snap.data(), ...updates } as Paper;
+          await setDoc(doc(firestoreDb, 'papers', id), paper);
+          return paper;
+        }
+      } catch (err: any) {
+        console.error("Firestore updatePaper error:", err.message);
+      }
+    }
     const paper = this.db.papers.find(p => p.id === id);
     if (paper) {
       Object.assign(paper, updates);
@@ -582,7 +758,31 @@ class ServerDatabase {
     return paper;
   }
 
-  deletePaper(id: string) {
+  async deletePaper(id: string): Promise<void> {
+    if (firestoreDb) {
+      try {
+        await deleteDoc(doc(firestoreDb, 'papers', id));
+        
+        // Delete related sub-resources in firestore
+        const deleteRelation = async (colName: string) => {
+          const snap = await getDocs(collection(firestoreDb, colName));
+          for (const d of snap.docs) {
+            const data = d.data();
+            if (data.paperId === id) {
+              await deleteDoc(doc(firestoreDb, colName, d.id));
+            }
+          }
+        };
+        await deleteRelation('notes');
+        await deleteRelation('flashcards');
+        await deleteRelation('quizzes');
+        await deleteRelation('chats');
+        await deleteRelation('savedCitations');
+        return;
+      } catch (err: any) {
+        console.error("Firestore deletePaper error:", err.message);
+      }
+    }
     this.db.papers = this.db.papers.filter(p => p.id !== id);
     this.db.notes = this.db.notes.filter(n => n.paperId !== id);
     this.db.flashcards = this.db.flashcards.filter(f => f.paperId !== id);
@@ -593,15 +793,50 @@ class ServerDatabase {
   }
 
   // Note Operations
-  getNotes(): Note[] {
+  async getNotes(): Promise<Note[]> {
+    if (firestoreDb) {
+      try {
+        const snap = await getDocs(collection(firestoreDb, 'notes'));
+        return snap.docs.map(doc => doc.data() as Note);
+      } catch (err: any) {
+        console.error("Firestore getNotes error:", err.message);
+      }
+    }
     return this.db.notes;
   }
 
-  getNoteForPaper(paperId: string): Note | undefined {
+  async getNoteForPaper(paperId: string): Promise<Note | undefined> {
+    if (firestoreDb) {
+      try {
+        const qSnap = await getDocs(query(collection(firestoreDb, 'notes'), where('paperId', '==', paperId), limit(1)));
+        if (!qSnap.empty) {
+          return qSnap.docs[0].data() as Note;
+        }
+      } catch (err: any) {
+        console.error("Firestore getNoteForPaper error:", err.message);
+      }
+    }
     return this.db.notes.find(n => n.paperId === paperId);
   }
 
-  createOrUpdateNote(paperId: string, title: string, content: string): Note {
+  async createOrUpdateNote(paperId: string, title: string, content: string): Promise<Note> {
+    if (firestoreDb) {
+      try {
+        const existingNote = await this.getNoteForPaper(paperId);
+        const noteId = existingNote ? existingNote.id : `n-${Date.now()}`;
+        const note: Note = {
+          id: noteId,
+          paperId,
+          title,
+          content,
+          updatedAt: new Date().toISOString()
+        };
+        await setDoc(doc(firestoreDb, 'notes', noteId), note);
+        return note;
+      } catch (err: any) {
+        console.error("Firestore createOrUpdateNote error:", err.message);
+      }
+    }
     let note = this.db.notes.find(n => n.paperId === paperId);
     if (note) {
       note.title = title;
@@ -622,15 +857,36 @@ class ServerDatabase {
   }
 
   // Flashcard Operations
-  getFlashcards(paperId?: string): Flashcard[] {
+  async getFlashcards(paperId?: string): Promise<Flashcard[]> {
+    if (firestoreDb) {
+      try {
+        const snap = await getDocs(collection(firestoreDb, 'flashcards'));
+        const allCards = snap.docs.map(doc => doc.data() as Flashcard);
+        if (paperId) {
+          return allCards.filter(f => f.paperId === paperId);
+        }
+        return allCards;
+      } catch (err: any) {
+        console.error("Firestore getFlashcards error:", err.message);
+      }
+    }
     if (paperId) {
       return this.db.flashcards.filter(f => f.paperId === paperId);
     }
     return this.db.flashcards;
   }
 
-  saveFlashcards(cards: Flashcard[]) {
-    // Add only new ones, or replace them
+  async saveFlashcards(cards: Flashcard[]): Promise<void> {
+    if (firestoreDb) {
+      try {
+        for (const card of cards) {
+          await setDoc(doc(firestoreDb, 'flashcards', card.id), card);
+        }
+        return;
+      } catch (err: any) {
+        console.error("Firestore saveFlashcards error:", err.message);
+      }
+    }
     cards.forEach(card => {
       const idx = this.db.flashcards.findIndex(f => f.id === card.id);
       if (idx > -1) {
@@ -642,7 +898,23 @@ class ServerDatabase {
     this.persist();
   }
 
-  updateFlashcardDifficulty(cardId: string, difficulty: 'easy' | 'medium' | 'hard' | null) {
+  async updateFlashcardDifficulty(cardId: string, difficulty: 'easy' | 'medium' | 'hard' | null): Promise<Flashcard | undefined> {
+    if (firestoreDb) {
+      try {
+        const snap = await getDoc(doc(firestoreDb, 'flashcards', cardId));
+        if (snap.exists()) {
+          const card = {
+            ...snap.data(),
+            difficulty,
+            lastReviewed: new Date().toISOString()
+          } as Flashcard;
+          await setDoc(doc(firestoreDb, 'flashcards', cardId), card);
+          return card;
+        }
+      } catch (err: any) {
+        console.error("Firestore updateFlashcardDifficulty error:", err.message);
+      }
+    }
     const card = this.db.flashcards.find(f => f.id === cardId);
     if (card) {
       card.difficulty = difficulty;
@@ -653,18 +925,48 @@ class ServerDatabase {
   }
 
   // Quiz Operations
-  getQuizzes(paperId?: string): Quiz[] {
+  async getQuizzes(paperId?: string): Promise<Quiz[]> {
+    if (firestoreDb) {
+      try {
+        const snap = await getDocs(collection(firestoreDb, 'quizzes'));
+        const allQuizzes = snap.docs.map(doc => doc.data() as Quiz);
+        if (paperId) {
+          return allQuizzes.filter(q => q.paperId === paperId);
+        }
+        return allQuizzes;
+      } catch (err: any) {
+        console.error("Firestore getQuizzes error:", err.message);
+      }
+    }
     if (paperId) {
       return this.db.quizzes.filter(q => q.paperId === paperId);
     }
     return this.db.quizzes;
   }
 
-  getQuiz(id: string): Quiz | undefined {
+  async getQuiz(id: string): Promise<Quiz | undefined> {
+    if (firestoreDb) {
+      try {
+        const snap = await getDoc(doc(firestoreDb, 'quizzes', id));
+        if (snap.exists()) {
+          return snap.data() as Quiz;
+        }
+      } catch (err: any) {
+        console.error("Firestore getQuiz error:", err.message);
+      }
+    }
     return this.db.quizzes.find(q => q.id === id);
   }
 
-  saveQuiz(quiz: Quiz): Quiz {
+  async saveQuiz(quiz: Quiz): Promise<Quiz> {
+    if (firestoreDb) {
+      try {
+        await setDoc(doc(firestoreDb, 'quizzes', quiz.id), quiz);
+        return quiz;
+      } catch (err: any) {
+        console.error("Firestore saveQuiz error:", err.message);
+      }
+    }
     const idx = this.db.quizzes.findIndex(q => q.id === quiz.id);
     if (idx > -1) {
       this.db.quizzes[idx] = quiz;
@@ -675,7 +977,23 @@ class ServerDatabase {
     return quiz;
   }
 
-  submitQuizScore(quizId: string, score: number) {
+  async submitQuizScore(quizId: string, score: number): Promise<Quiz | undefined> {
+    if (firestoreDb) {
+      try {
+        const snap = await getDoc(doc(firestoreDb, 'quizzes', quizId));
+        if (snap.exists()) {
+          const quiz = {
+            ...snap.data(),
+            score,
+            takenAt: new Date().toISOString()
+          } as Quiz;
+          await setDoc(doc(firestoreDb, 'quizzes', quizId), quiz);
+          return quiz;
+        }
+      } catch (err: any) {
+        console.error("Firestore submitQuizScore error:", err.message);
+      }
+    }
     const quiz = this.db.quizzes.find(q => q.id === quizId);
     if (quiz) {
       quiz.score = score;
@@ -686,24 +1004,70 @@ class ServerDatabase {
   }
 
   // Chat Sessions
-  getChats(paperId?: string): ChatSession[] {
+  async getChats(paperId?: string): Promise<ChatSession[]> {
+    if (firestoreDb) {
+      try {
+        const snap = await getDocs(collection(firestoreDb, 'chats'));
+        const allChats = snap.docs.map(doc => doc.data() as ChatSession);
+        if (paperId) {
+          return allChats.filter(c => c.paperId === paperId);
+        }
+        return allChats;
+      } catch (err: any) {
+        console.error("Firestore getChats error:", err.message);
+      }
+    }
     if (paperId) {
       return this.db.chats.filter(c => c.paperId === paperId);
     }
     return this.db.chats;
   }
 
-  getChat(id: string): ChatSession | undefined {
+  async getChat(id: string): Promise<ChatSession | undefined> {
+    if (firestoreDb) {
+      try {
+        const snap = await getDoc(doc(firestoreDb, 'chats', id));
+        if (snap.exists()) {
+          return snap.data() as ChatSession;
+        }
+      } catch (err: any) {
+        console.error("Firestore getChat error:", err.message);
+      }
+    }
     return this.db.chats.find(c => c.id === id);
   }
 
-  createChat(chat: ChatSession): ChatSession {
+  async createChat(chat: ChatSession): Promise<ChatSession> {
+    if (firestoreDb) {
+      try {
+        await setDoc(doc(firestoreDb, 'chats', chat.id), chat);
+        return chat;
+      } catch (err: any) {
+        console.error("Firestore createChat error:", err.message);
+      }
+    }
     this.db.chats.push(chat);
     this.persist();
     return chat;
   }
 
-  saveChatMessages(chatId: string, messages: any[]) {
+  async saveChatMessages(chatId: string, messages: any[]): Promise<void> {
+    if (firestoreDb) {
+      try {
+        const snap = await getDoc(doc(firestoreDb, 'chats', chatId));
+        if (snap.exists()) {
+          const chat = {
+            ...snap.data(),
+            messages,
+            lastMessageAt: new Date().toISOString()
+          } as ChatSession;
+          await setDoc(doc(firestoreDb, 'chats', chatId), chat);
+          return;
+        }
+      } catch (err: any) {
+        console.error("Firestore saveChatMessages error:", err.message);
+      }
+    }
     const chat = this.db.chats.find(c => c.id === chatId);
     if (chat) {
       chat.messages = messages;
@@ -713,50 +1077,114 @@ class ServerDatabase {
   }
 
   // Literature Review
-  getLiteratureReviews(): LiteratureReview[] {
+  async getLiteratureReviews(): Promise<LiteratureReview[]> {
+    if (firestoreDb) {
+      try {
+        const snap = await getDocs(collection(firestoreDb, 'literatureReviews'));
+        return snap.docs.map(doc => doc.data() as LiteratureReview);
+      } catch (err: any) {
+        console.error("Firestore getLiteratureReviews error:", err.message);
+      }
+    }
     return this.db.literatureReviews;
   }
 
-  createLiteratureReview(review: LiteratureReview): LiteratureReview {
+  async createLiteratureReview(review: LiteratureReview): Promise<LiteratureReview> {
+    if (firestoreDb) {
+      try {
+        await setDoc(doc(firestoreDb, 'literatureReviews', review.id), review);
+        return review;
+      } catch (err: any) {
+        console.error("Firestore createLiteratureReview error:", err.message);
+      }
+    }
     this.db.literatureReviews.push(review);
     this.persist();
     return review;
   }
 
-  deleteLiteratureReview(id: string) {
+  async deleteLiteratureReview(id: string): Promise<void> {
+    if (firestoreDb) {
+      try {
+        await deleteDoc(doc(firestoreDb, 'literatureReviews', id));
+        return;
+      } catch (err: any) {
+        console.error("Firestore deleteLiteratureReview error:", err.message);
+      }
+    }
     this.db.literatureReviews = this.db.literatureReviews.filter(lr => lr.id !== id);
     this.persist();
   }
 
   // Saved Citations
-  getSavedCitations(): SavedCitation[] {
+  async getSavedCitations(): Promise<SavedCitation[]> {
+    if (firestoreDb) {
+      try {
+        const snap = await getDocs(collection(firestoreDb, 'savedCitations'));
+        return snap.docs.map(doc => doc.data() as SavedCitation);
+      } catch (err: any) {
+        console.error("Firestore getSavedCitations error:", err.message);
+      }
+    }
     return this.db.savedCitations;
   }
 
-  saveCitation(citation: SavedCitation): SavedCitation {
+  async saveCitation(citation: SavedCitation): Promise<SavedCitation> {
+    if (firestoreDb) {
+      try {
+        await setDoc(doc(firestoreDb, 'savedCitations', citation.id), citation);
+        return citation;
+      } catch (err: any) {
+        console.error("Firestore saveCitation error:", err.message);
+      }
+    }
     this.db.savedCitations.push(citation);
     this.persist();
     return citation;
   }
 
-  deleteSavedCitation(id: string) {
+  async deleteSavedCitation(id: string): Promise<void> {
+    if (firestoreDb) {
+      try {
+        await deleteDoc(doc(firestoreDb, 'savedCitations', id));
+        return;
+      } catch (err: any) {
+        console.error("Firestore deleteSavedCitation error:", err.message);
+      }
+    }
     this.db.savedCitations = this.db.savedCitations.filter(c => c.id !== id);
     this.persist();
   }
 
   // Activity Logs
-  getActivities(): StudyActivity[] {
+  async getActivities(): Promise<StudyActivity[]> {
+    if (firestoreDb) {
+      try {
+        const snap = await getDocs(collection(firestoreDb, 'activities'));
+        const acts = snap.docs.map(doc => doc.data() as StudyActivity);
+        return acts.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      } catch (err: any) {
+        console.error("Firestore getActivities error:", err.message);
+      }
+    }
     return this.db.activities;
   }
 
-  addActivity(activity: Omit<StudyActivity, 'id' | 'timestamp'>): StudyActivity {
+  async addActivity(activity: Omit<StudyActivity, 'id' | 'timestamp'>): Promise<StudyActivity> {
     const newAct: StudyActivity = {
       id: `sa-${Date.now()}`,
       ...activity,
       timestamp: new Date().toISOString()
     };
+    if (firestoreDb) {
+      try {
+        await setDoc(doc(firestoreDb, 'activities', newAct.id), newAct);
+        return newAct;
+      } catch (err: any) {
+        console.error("Firestore addActivity error:", err.message);
+      }
+    }
     this.db.activities.unshift(newAct);
-    // Keep last 100 activities
     if (this.db.activities.length > 100) {
       this.db.activities = this.db.activities.slice(0, 100);
     }
@@ -765,32 +1193,35 @@ class ServerDatabase {
   }
 
   // Metrics Calculation
-  getMetrics(): DashboardMetrics {
-    const readActivitiesCount = this.db.activities.filter(a => a.type === 'read').length;
-    const readingHours = Math.round((readActivitiesCount * 25 + 15) / 10) / 10 + 4.2; // Derived simulation
+  async getMetrics(): Promise<DashboardMetrics> {
+    const activities = await this.getActivities();
+    const papers = await this.getPapers();
+    const folders = await this.getFolders();
+    const quizzes = await this.getQuizzes();
 
-    // Dynamic weekly activity tracking
+    const readActivitiesCount = activities.filter(a => a.type === 'read').length;
+    const readingHours = Math.round((readActivitiesCount * 25 + 15) / 10) / 10 + 4.2;
+
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const currentDayIdx = new Date().getDay(); // 0 is Sun, 1 is Mon...
+    const currentDayIdx = new Date().getDay();
     const dayNamesOrdered = [...days.slice(currentDayIdx), ...days.slice(0, currentDayIdx)];
     
     const weeklyProgress = dayNamesOrdered.map((day, i) => {
-      // Seed realistic values + random variance based on activities
       const baseMin = [15, 30, 45, 10, 60, 90, 40][i % 7];
       return {
         day,
-        minutes: Math.min(120, baseMin + (this.db.activities.length % (i + 1)) * 5)
+        minutes: Math.min(120, baseMin + (activities.length % (i + 1)) * 5)
       };
     });
 
     return {
-      totalPapers: this.db.papers.length,
-      totalFolders: this.db.folders.length,
-      quizzesCompleted: this.db.quizzes.filter(q => q.score !== undefined).length,
-      flashcardsReviewed: this.db.activities.filter(a => a.type === 'flashcard').length * 4 + 8,
+      totalPapers: papers.length,
+      totalFolders: folders.length,
+      quizzesCompleted: quizzes.filter(q => q.score !== undefined).length,
+      flashcardsReviewed: activities.filter(a => a.type === 'flashcard').length * 4 + 8,
       readingHours,
       weeklyProgress,
-      recentActivity: this.db.activities.slice(0, 5)
+      recentActivity: activities.slice(0, 5)
     };
   }
 }

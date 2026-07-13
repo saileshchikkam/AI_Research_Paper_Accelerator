@@ -1,6 +1,24 @@
 import React, { useState } from 'react';
 import { BookOpen, Sparkles, Brain, Award, Shield, ArrowRight, LogIn, UserPlus } from 'lucide-react';
 import { User } from '../types';
+import { 
+  auth, 
+  db as firestore, 
+  googleProvider, 
+  isFirebaseConfigured 
+} from '../lib/firebase';
+import { 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword, 
+  signInWithPopup, 
+  sendPasswordResetEmail,
+  sendEmailVerification
+} from 'firebase/auth';
+import { 
+  doc, 
+  setDoc, 
+  getDoc 
+} from 'firebase/firestore';
 
 interface LandingPageProps {
   onLoginSuccess: (user: User) => void;
@@ -13,6 +31,7 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
   const [name, setName] = useState('');
   const [role, setRole] = useState<'student' | 'professor' | 'researcher' | 'engineer'>('student');
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [loading, setLoading] = useState(false);
 
   // Quick seed logins
@@ -25,6 +44,7 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
   const handleSeedLogin = async (seedEmail: string) => {
     setLoading(true);
     setError('');
+    setSuccessMessage('');
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
@@ -44,44 +64,153 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
     }
   };
 
+  const handleForgotPassword = async () => {
+    if (!email) {
+      setError('Please enter your email address first to reset your password.');
+      return;
+    }
+    setError('');
+    setSuccessMessage('');
+    setLoading(true);
+    try {
+      await sendPasswordResetEmail(auth, email);
+      setSuccessMessage(`A password reset link has been successfully sent to ${email}`);
+    } catch (err: any) {
+      console.error("Forgot password error:", err);
+      setError(err.message || 'Could not send password reset email.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setError('');
+    setSuccessMessage('');
+    setLoading(true);
+    try {
+      const userCredential = await signInWithPopup(auth, googleProvider);
+      const user = userCredential.user;
+      
+      const userDocRef = doc(firestore, 'users', user.uid);
+      const userDocSnap = await getDoc(userDocRef);
+      let loggedInUser: User;
+      
+      if (userDocSnap.exists()) {
+        loggedInUser = userDocSnap.data() as User;
+      } else {
+        loggedInUser = {
+          id: user.uid,
+          name: user.displayName || 'Google Scholar',
+          email: user.email || '',
+          role: 'student',
+          enrolledAt: new Date().toISOString(),
+          avatar: user.photoURL || `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=120`
+        };
+        await setDoc(userDocRef, loggedInUser);
+      }
+      onLoginSuccess(loggedInUser);
+    } catch (err: any) {
+      console.error("Google sign in failed:", err);
+      setError(err.message || 'Google authentication failed.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setSuccessMessage('');
     setLoading(true);
 
     try {
-      if (isLoginTab) {
-        const res = await fetch('/api/auth/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password })
-        });
-        const data = await res.json();
-        if (res.ok && data.success) {
-          onLoginSuccess(data.user);
+      if (isFirebaseConfigured) {
+        if (isLoginTab) {
+          // Firebase Auth Sign In
+          const userCredential = await signInWithEmailAndPassword(auth, email, password);
+          const userDocRef = doc(firestore, 'users', userCredential.user.uid);
+          const userDocSnap = await getDoc(userDocRef);
+          
+          if (userDocSnap.exists()) {
+            onLoginSuccess(userDocSnap.data() as User);
+          } else {
+            // Fallback user if record missing in Firestore
+            const fallbackUser: User = {
+              id: userCredential.user.uid,
+              name: userCredential.user.displayName || email.split('@')[0],
+              email: email,
+              role: 'student',
+              enrolledAt: new Date().toISOString(),
+              avatar: `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=120`
+            };
+            await setDoc(userDocRef, fallbackUser);
+            onLoginSuccess(fallbackUser);
+          }
         } else {
-          setError(data.error || 'Invalid credentials.');
+          // Firebase Auth Registration
+          if (!name || !email) {
+            setError('Name and email are required');
+            setLoading(false);
+            return;
+          }
+          const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+          
+          // Send verification email
+          try {
+            await sendEmailVerification(userCredential.user);
+            setSuccessMessage(`Account created successfully! A verification email has been sent to ${email}`);
+          } catch (verErr) {
+            console.warn("Failed to send verification email", verErr);
+          }
+
+          const newUser: User = {
+            id: userCredential.user.uid,
+            name,
+            email,
+            role: role || 'student',
+            enrolledAt: new Date().toISOString(),
+            avatar: `https://images.unsplash.com/photo-${1500000000000 + Math.floor(Math.random() * 999999)}?auto=format&fit=crop&q=80&w=120`
+          };
+          
+          await setDoc(doc(firestore, 'users', newUser.id), newUser);
+          onLoginSuccess(newUser);
         }
       } else {
-        if (!name || !email) {
-          setError('Name and email are required');
-          setLoading(false);
-          return;
-        }
-        const res = await fetch('/api/auth/register', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, email, role })
-        });
-        const data = await res.json();
-        if (res.ok && data.success) {
-          onLoginSuccess(data.user);
+        // Fallback standard database relative routing
+        if (isLoginTab) {
+          const res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+          });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            onLoginSuccess(data.user);
+          } else {
+            setError(data.error || 'Invalid credentials.');
+          }
         } else {
-          setError(data.error || 'Registration failed.');
+          if (!name || !email) {
+            setError('Name and email are required');
+            setLoading(false);
+            return;
+          }
+          const res = await fetch('/api/auth/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, email, role })
+          });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            onLoginSuccess(data.user);
+          } else {
+            setError(data.error || 'Registration failed.');
+          }
         }
       }
-    } catch (err) {
-      setError('Could not establish server database connection.');
+    } catch (err: any) {
+      console.error("Auth error caught:", err);
+      setError(err.message || 'Could not establish server database connection.');
     } finally {
       setLoading(false);
     }
@@ -201,6 +330,12 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
                 </div>
               )}
 
+              {successMessage && (
+                <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl text-xs font-medium">
+                  {successMessage}
+                </div>
+              )}
+
               <form onSubmit={handleSubmit} className="space-y-4">
                 {!isLoginTab && (
                   <>
@@ -246,7 +381,18 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Password</label>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-xs font-semibold text-slate-600">Password</label>
+                    {isLoginTab && isFirebaseConfigured && (
+                      <button 
+                        type="button"
+                        onClick={handleForgotPassword}
+                        className="text-[11px] text-blue-600 hover:underline focus:outline-none font-medium"
+                      >
+                        Forgot Password?
+                      </button>
+                    )}
+                  </div>
                   <input 
                     type="password" 
                     value={password}
@@ -268,6 +414,32 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
                   <ArrowRight className="w-4 h-4" />
                 </button>
               </form>
+
+              {isFirebaseConfigured && (
+                <div className="mt-4">
+                  <div className="relative flex py-2 items-center">
+                    <div className="flex-grow border-t border-slate-100"></div>
+                    <span className="flex-shrink mx-4 text-slate-400 text-[10px] font-semibold uppercase tracking-wider">or continue with</span>
+                    <div className="flex-grow border-t border-slate-100"></div>
+                  </div>
+                  
+                  <button
+                    type="button"
+                    onClick={handleGoogleSignIn}
+                    disabled={loading}
+                    className="w-full mt-2 bg-white hover:bg-slate-50 text-slate-700 font-semibold py-2.5 px-4 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all flex items-center justify-center gap-2 text-xs"
+                    id="google_auth_btn"
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24">
+                      <path fill="#EA4335" d="M12 5.04c1.74 0 3.3.6 4.53 1.78l3.38-3.38C17.84 1.54 15.13 1 12 1 7.24 1 3.23 3.74 1.34 7.74l3.96 3.07C6.26 7.42 8.9 5.04 12 5.04z" />
+                      <path fill="#4285F4" d="M23.49 12.27c0-.81-.07-1.59-.2-2.36H12v4.51h6.46c-.29 1.48-1.14 2.73-2.42 3.58l3.76 2.91c2.2-2.03 3.69-5.02 3.69-8.64z" />
+                      <path fill="#FBBC05" d="M5.3 14.81c-.24-.72-.38-1.49-.38-2.31s.14-1.59.38-2.31L1.34 7.12C.49 8.91 0 10.9 0 13s.49 4.09 1.34 5.88l3.96-3.07z" />
+                      <path fill="#34A853" d="M12 23c3.24 0 5.97-1.07 7.96-2.91l-3.76-2.91c-1.1.74-2.51 1.18-4.2 1.18-3.1 0-5.74-2.38-6.7-5.77L1.34 15.62C3.23 19.62 7.24 23 12 23z" />
+                    </svg>
+                    Continue with Google
+                  </button>
+                </div>
+              )}
 
               {/* Instant 1-Click login seeds */}
               <div className="mt-8 pt-6 border-t border-slate-100" id="instant_login_container">
