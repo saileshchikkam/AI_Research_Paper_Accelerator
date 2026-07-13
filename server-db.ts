@@ -10,12 +10,18 @@ import {
   Quiz, LiteratureReview, SavedCitation, StudyActivity, DashboardMetrics 
 } from './src/types';
 
-const DB_FILE = path.join(process.cwd(), 'src', 'db.json');
+const DB_FILE = process.env.VERCEL 
+  ? path.join('/tmp', 'db.json') 
+  : path.join(process.cwd(), 'src', 'db.json');
 
 // Ensure parent directories exist
 const dbDir = path.dirname(DB_FILE);
 if (!fs.existsSync(dbDir)) {
-  fs.mkdirSync(dbDir, { recursive: true });
+  try {
+    fs.mkdirSync(dbDir, { recursive: true });
+  } catch (err) {
+    console.error('Failed to create DB directory:', err);
+  }
 }
 
 // Parse environment variables with priority on Firebase config
@@ -532,6 +538,19 @@ class ServerDatabase {
         return JSON.parse(raw);
       } catch (err) {
         console.error('Error parsing db file, resetting to defaults.', err);
+      }
+    } else if (process.env.VERCEL) {
+      // Copy bundled db.json template to writeable /tmp on Vercel
+      const bundledPath = path.join(process.cwd(), 'src', 'db.json');
+      if (fs.existsSync(bundledPath)) {
+        try {
+          const raw = fs.readFileSync(bundledPath, 'utf8');
+          fs.writeFileSync(DB_FILE, raw, 'utf8');
+          console.log('Successfully initialized /tmp/db.json from bundled template.');
+          return JSON.parse(raw);
+        } catch (err) {
+          console.error('Failed to copy bundled db.json to /tmp on Vercel:', err);
+        }
       }
     }
 
