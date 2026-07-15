@@ -9,6 +9,7 @@ import { QuizModel, IQuiz } from './server/models/Quiz';
 import { LiteratureReviewModel, ILiteratureReview } from './server/models/LiteratureReview';
 import { SavedCitationModel, ISavedCitation } from './server/models/SavedCitation';
 import { StudyActivityModel, IStudyActivity } from './server/models/StudyActivity';
+import { AiConfigModel } from './server/models/AiConfig';
 
 import { 
   User, Paper, Folder, ChatSession, Note, Flashcard, 
@@ -1318,6 +1319,27 @@ class ServerDatabase {
       weeklyProgress,
       recentActivity: activities.slice(0, 5)
     };
+  }
+
+  // AI Config Operations
+  async getAiConfig(): Promise<{ temperature: number; chunkSize: number; persona: string }> {
+    const config = await AiConfigModel.findById('global_config').lean();
+    if (!config) {
+      return { temperature: 0.2, chunkSize: 4000, persona: 'scholarly' };
+    }
+    return {
+      temperature: config.temperature,
+      chunkSize: config.chunkSize,
+      persona: config.persona
+    };
+  }
+
+  async saveAiConfig(config: { temperature: number; chunkSize: number; persona: string }): Promise<void> {
+    await AiConfigModel.updateOne(
+      { _id: 'global_config' },
+      { _id: 'global_config', ...config },
+      { upsert: true }
+    );
   }
 }
 

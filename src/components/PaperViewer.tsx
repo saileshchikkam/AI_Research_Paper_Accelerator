@@ -29,6 +29,7 @@ export default function PaperViewer({ paperId, onBackToLibrary, userId, onSelect
   const [allPapers, setAllPapers] = useState<Paper[]>([]);
   const [librarySearch, setLibrarySearch] = useState('');
   const [mobileActiveView, setMobileActiveView] = useState<'document' | 'ai'>('document');
+  const [readerLayout, setReaderLayout] = useState<'text' | 'pdf'>('pdf');
 
   // NotebookLM Interactive Navigation States
   const [showOutline, setShowOutline] = useState(false);
@@ -736,6 +737,35 @@ export default function PaperViewer({ paperId, onBackToLibrary, userId, onSelect
                 Page {currentPageNum} of {paper.pages.length}
               </span>
             </div>
+
+            {/* Layout Toggle Button Segment */}
+            <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200" id="reader_layout_toggle">
+              <button
+                onClick={() => setReaderLayout('pdf')}
+                className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all flex items-center gap-1 ${
+                  readerLayout === 'pdf'
+                    ? 'bg-white text-blue-600 shadow-sm font-black'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+                title="Academic Manuscript PDF Layout"
+              >
+                <FileText className="w-3 h-3 text-red-500" />
+                Aesthetic PDF
+              </button>
+              <button
+                onClick={() => setReaderLayout('text')}
+                className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all flex items-center gap-1 ${
+                  readerLayout === 'text'
+                    ? 'bg-white text-blue-600 shadow-sm font-black'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+                title="Grounded Clean Text Reader"
+              >
+                <List className="w-3 h-3 text-blue-500" />
+                Text Reader
+              </button>
+            </div>
+
             <div className="flex items-center gap-1.5">
               <button
                 onClick={() => setCurrentPageNum(prev => Math.max(1, prev - 1))}
@@ -789,36 +819,86 @@ export default function PaperViewer({ paperId, onBackToLibrary, userId, onSelect
             )}
 
             {/* Actual scrolling Page document contents */}
-            <div className="flex-1 overflow-y-auto px-10 py-12 text-left leading-relaxed font-sans text-slate-800" id="doc_text_viewport">
-              <div className="max-w-2xl mx-auto space-y-6 select-text">
-                {currentPageNum === 1 && (
-                  <div className="border-b border-slate-100 pb-6 mb-6">
-                    <h1 className="font-display font-black text-2xl text-slate-900 leading-snug">{paper.title}</h1>
-                    <p className="text-sm font-semibold text-slate-600 mt-2">{paper.authors}</p>
-                    <p className="text-xs text-slate-400 mt-1 font-mono">{paper.journal} • {paper.year}</p>
+            <div className={`flex-1 overflow-y-auto px-4 sm:px-6 md:px-10 py-6 sm:py-8 md:py-12 text-left leading-relaxed font-sans text-slate-800 transition-colors ${readerLayout === 'pdf' ? 'bg-slate-200/70' : 'bg-white'}`} id="doc_text_viewport">
+              {readerLayout === 'pdf' ? (
+                /* PDF STYLE CONTAINER */
+                <div className="mx-auto my-4 max-w-[21cm] min-h-[29.7cm] bg-white border border-slate-300 shadow-xl rounded-sm p-6 sm:p-10 md:p-12 relative flex flex-col justify-between font-serif text-slate-900 select-text">
+                  
+                  {/* PDF header indicator */}
+                  <div className="border-b border-slate-200 pb-2 mb-6 flex justify-between items-center text-[9px] uppercase tracking-wider text-slate-400 font-mono">
+                    <span>ResearchMind AI Grounded Scholar Portal</span>
+                    <span>DOI: 10.1145/rmind.{paper.year}.{paper.id.substring(0, 4)}</span>
                   </div>
-                )}
 
-                {/* Page body content split by paragraph for precise highlighting & citation grounding */}
-                <div className="space-y-4">
-                  {(paper.pages[currentPageNum - 1] || "This page has no content blocks.").split('\n\n').map((pText, pIdx) => {
-                    const isHighlighted = highlightedPageNum === currentPageNum && highlightedParagraphIndex === pIdx;
-                    return (
-                      <div
-                        key={pIdx}
-                        id={`p-idx-${pIdx}`}
-                        className={`transition-all duration-300 p-2.5 -mx-2.5 rounded-xl border border-transparent text-sm leading-relaxed text-slate-800 font-normal select-text whitespace-pre-wrap ${
-                          isHighlighted
-                            ? 'bg-amber-50 border-amber-200 shadow-sm font-medium text-slate-900 ring-2 ring-amber-400/20'
-                            : 'hover:bg-slate-50/50'
-                        }`}
-                      >
-                        {pText}
+                  <div className="flex-1 space-y-6">
+                    {currentPageNum === 1 && (
+                      <div className="border-b-2 border-double border-slate-300 pb-6 mb-6">
+                        <h1 className="font-serif font-black text-xl sm:text-2xl text-slate-950 leading-tight tracking-tight text-center">{paper.title}</h1>
+                        <p className="text-xs font-semibold text-slate-700 mt-3 text-center italic">{paper.authors}</p>
+                        <p className="text-[10px] text-slate-400 mt-1.5 text-center font-mono uppercase tracking-wider">{paper.journal} • {paper.year}</p>
                       </div>
-                    );
-                  })}
+                    )}
+
+                    {/* Page body content */}
+                    <div className="space-y-4 text-justify text-xs sm:text-sm leading-relaxed text-slate-850">
+                      {(paper.pages[currentPageNum - 1] || "This page has no content blocks.").split('\n\n').map((pText, pIdx) => {
+                        const isHighlighted = highlightedPageNum === currentPageNum && highlightedParagraphIndex === pIdx;
+                        return (
+                          <div
+                            key={pIdx}
+                            id={`p-idx-${pIdx}`}
+                            className={`transition-all duration-300 p-2 rounded-lg border border-transparent whitespace-pre-wrap ${
+                              isHighlighted
+                                ? 'bg-amber-100/80 border-amber-300 shadow-sm font-semibold text-slate-955 ring-2 ring-amber-400/20 font-serif'
+                                : 'hover:bg-slate-50/50'
+                            }`}
+                          >
+                            {pText}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* PDF footer indicator */}
+                  <div className="border-t border-slate-200 pt-3 mt-8 flex justify-between items-center text-[9px] text-slate-400 font-mono">
+                    <span>© {paper.year} {paper.authors.split(',')[0]} et al.</span>
+                    <span className="font-black text-slate-600">Page {currentPageNum} of {paper.pages.length}</span>
+                  </div>
+                  
                 </div>
-              </div>
+              ) : (
+                /* ORIGINAL STANDARD TEXT READER */
+                <div className="max-w-2xl mx-auto space-y-6 select-text">
+                  {currentPageNum === 1 && (
+                    <div className="border-b border-slate-100 pb-6 mb-6">
+                      <h1 className="font-display font-black text-2xl text-slate-900 leading-snug">{paper.title}</h1>
+                      <p className="text-sm font-semibold text-slate-600 mt-2">{paper.authors}</p>
+                      <p className="text-xs text-slate-400 mt-1 font-mono">{paper.journal} • {paper.year}</p>
+                    </div>
+                  )}
+
+                  {/* Page body content split by paragraph for precise highlighting & citation grounding */}
+                  <div className="space-y-4">
+                    {(paper.pages[currentPageNum - 1] || "This page has no content blocks.").split('\n\n').map((pText, pIdx) => {
+                      const isHighlighted = highlightedPageNum === currentPageNum && highlightedParagraphIndex === pIdx;
+                      return (
+                        <div
+                          key={pIdx}
+                          id={`p-idx-${pIdx}`}
+                          className={`transition-all duration-300 p-2.5 -mx-2.5 rounded-xl border border-transparent text-sm leading-relaxed text-slate-800 font-normal select-text whitespace-pre-wrap ${
+                            isHighlighted
+                              ? 'bg-amber-50 border-amber-200 shadow-sm font-medium text-slate-900 ring-2 ring-amber-400/20'
+                              : 'hover:bg-slate-50/50'
+                          }`}
+                        >
+                          {pText}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

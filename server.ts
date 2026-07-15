@@ -857,6 +857,8 @@ app.post('/api/chats/:id/messages', async (req: Request, res: Response) => {
 
   // 3. Trigger Gemini RAG response!
   try {
+    const aiConfig = await db.getAiConfig();
+
     if (chat.paperId === 'all') {
       const papers = await db.getPapers();
       const allChunks = papers.flatMap(p => {
@@ -877,7 +879,7 @@ app.post('/api/chats/:id/messages', async (req: Request, res: Response) => {
         chunks: allChunks
       };
 
-      const result = await AIService.execute(collectiveDoc, 'chat', text);
+      const result = await AIService.execute(collectiveDoc, 'chat', text, aiConfig);
       const aiMsg = {
         id: `m-a-${Date.now()}`,
         sender: 'ai' as const,
@@ -905,7 +907,7 @@ app.post('/api/chats/:id/messages', async (req: Request, res: Response) => {
         chunks: paper.chunks || DocumentProcessor.chunkDocument(paper.content)
       };
 
-      const result = await AIService.execute(doc, 'chat', text);
+      const result = await AIService.execute(doc, 'chat', text, aiConfig);
       const aiMsg = {
         id: `m-a-${Date.now()}`,
         sender: 'ai' as const,
@@ -919,21 +921,8 @@ app.post('/api/chats/:id/messages', async (req: Request, res: Response) => {
       return res.json(aiMsg);
     }
   } catch (err: any) {
-    console.error('RAG Gemini answer generation failed', err.message);
-    
-    // Fallback response if Gemini fails or is offline
-    const fallbackAiMsg = {
-      id: `m-a-${Date.now()}`,
-      sender: 'ai' as const,
-      text: `[Offline/Demo Mode] Thank you for your question. I've analyzed the paper context in our local index regarding: "${text}". Under standard operation, I would query the Gemini 3.5 Flash model with full grounding text. Please verify that your GEMINI_API_KEY is correctly set in your environment Secrets.`,
-      timestamp: new Date().toISOString(),
-      sources: chat.paperId !== 'all' ? [
-        { title: 'Abstract Grounding', snippet: 'Local document parsing was successful.' }
-      ] : []
-    };
-    const finalMessages = [...updatedMessages, fallbackAiMsg];
-    await db.saveChatMessages(chatId, finalMessages);
-    res.json(fallbackAiMsg);
+    console.error('RAG Gemini answer generation failed:', err);
+    res.status(500).json({ error: `Gemini API RAG generation failed: ${err.message}` });
   }
 });
 
@@ -1206,6 +1195,26 @@ app.get('/api/help', async (req: Request, res: Response) => {
       }
     ]
   });
+});
+
+// AI Configuration Endpoints
+app.get('/api/ai-config', async (req: Request, res: Response) => {
+  try {
+    const config = await db.getAiConfig();
+    res.json(config);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/ai-config', async (req: Request, res: Response) => {
+  try {
+    const { temperature, chunkSize, persona } = req.body;
+    await db.saveAiConfig({ temperature, chunkSize, persona });
+    res.json({ success: true, message: 'AI configuration updated successfully' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Catch-all 404 for API routes

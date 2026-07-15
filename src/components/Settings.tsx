@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Settings, KeyRound, Sliders, Eye, EyeOff, Sparkles, CheckCircle2, RefreshCw 
 } from 'lucide-react';
@@ -9,10 +9,34 @@ export default function SettingsPage() {
   const [persona, setPersona] = useState<'scholarly' | 'tutor' | 'reviewer'>('scholarly');
   const [successAlert, setSuccessAlert] = useState(false);
 
-  const handleSaveConfigs = (e: React.FormEvent) => {
+  useEffect(() => {
+    fetch('/api/ai-config')
+      .then(res => res.json())
+      .then(data => {
+        if (data.temperature !== undefined) setTemperature(data.temperature);
+        if (data.chunkSize !== undefined) setChunkSize(data.chunkSize);
+        if (data.persona !== undefined) setPersona(data.persona);
+      })
+      .catch(err => console.error('Error fetching AI config:', err));
+  }, []);
+
+  const handleSaveConfigs = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSuccessAlert(true);
-    setTimeout(() => setSuccessAlert(false), 3000);
+    try {
+      const res = await fetch('/api/ai-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ temperature, chunkSize, persona })
+      });
+      if (res.ok) {
+        setSuccessAlert(true);
+        setTimeout(() => setSuccessAlert(false), 3000);
+      } else {
+        console.error('Failed to save configuration');
+      }
+    } catch (err) {
+      console.error('Error saving configuration:', err);
+    }
   };
 
   return (

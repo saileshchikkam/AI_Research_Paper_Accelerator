@@ -172,7 +172,8 @@ export class AIService {
   static async execute(
     doc: ProcessedDocument,
     featureType: 'summarize' | 'chat' | 'flashcards' | 'quiz' | 'mindmap' | 'insight',
-    userPrompt = ''
+    userPrompt = '',
+    aiConfig?: { temperature?: number; chunkSize?: number; persona?: string }
   ): Promise<any> {
     const ai = getGeminiClient();
 
@@ -235,7 +236,15 @@ export class AIService {
         const relevantChunks = this.retrieveRelevantChunks(doc.chunks, userPrompt, 4);
         const groundingContext = relevantChunks.map(c => `[Chunk #${c.index + 1}]\n${c.content}`).join('\n\n');
 
+        let personaInstruction = "Replies in dense academic language with detailed section derivations.";
+        if (aiConfig?.persona === 'tutor') {
+          personaInstruction = "Replies as a Simplifier Socratic Tutor. Breaks down complex formulas into simple layperson metaphors and guides the user step-by-step.";
+        } else if (aiConfig?.persona === 'reviewer') {
+          personaInstruction = "Replies as a Skeptical Peer Reviewer. Critiques the paper, questioning methodologies, datasets, and claims, pointing out potential limitations.";
+        }
+
         const systemPrompt = `You are ResearchMind AI, a scholarly assistant. You answer questions strictly grounded in the provided research paper content.
+        Tone and style: ${personaInstruction}
         You MUST cite specific page numbers or chunk indications in your answer using bracket indicators like [Page X] or [Chunk Y].
         If the answer cannot be found in the provided paper, state: "I've checked the paper content, but this specific detail is not mentioned." Do not hallucinate or make up facts.`;
 
@@ -251,7 +260,7 @@ export class AIService {
           contents: promptContext,
           config: {
             systemInstruction: systemPrompt,
-            temperature: 0.1
+            temperature: aiConfig?.temperature !== undefined ? aiConfig.temperature : 0.1
           }
         });
 
