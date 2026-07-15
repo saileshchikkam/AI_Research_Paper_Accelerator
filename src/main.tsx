@@ -4,6 +4,7 @@ import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
+import { ThemeProvider } from './ThemeContext.tsx';
 
 // Global API Interceptor supporting custom production backend URL switching and robust error translations
 const originalFetch = window.fetch;
@@ -108,7 +109,9 @@ try {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <ThemeProvider>
+      <App />
+    </ThemeProvider>
   </StrictMode>,
 );
 

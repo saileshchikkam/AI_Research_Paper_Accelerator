@@ -61,7 +61,7 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-50 text-slate-900 font-sans" id="app_frame_container">
+    <div className="flex h-screen overflow-hidden bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans" id="app_frame_container">
       {/* PERSISTENT SIDEBAR */}
       <Sidebar 
         activeTab={activeTab} 
@@ -71,12 +71,12 @@ export default function App() {
       />
 
       {/* RIGHT WORKSPACE INTERFACE */}
-      <div className="flex-1 flex flex-col overflow-hidden" id="workspace_right_column">
+      <div className="flex-1 flex flex-col overflow-hidden dark:bg-slate-900" id="workspace_right_column">
         {/* UNIFIED TOP CONTEXT HEADER */}
         <Header activeTab={activeTab} user={user} />
 
         {/* DETAILED CONTENT VIEWS */}
-        <main className="flex-1 overflow-y-auto bg-slate-50/50" id="main_content_pane">
+        <main className="flex-1 overflow-y-auto bg-slate-50/50 dark:bg-slate-950/40" id="main_content_pane">
           {activeTab === 'dashboard' && (
             <Dashboard 
               user={user} 

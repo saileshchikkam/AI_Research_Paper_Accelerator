@@ -3,6 +3,7 @@ import {
   TrendingUp, Clock, Activity, Award, Calendar, RefreshCw, FileText, 
   MessageSquare, Edit3, Flame, CheckCircle, Database
 } from 'lucide-react';
+import { useTheme } from '../ThemeContext';
 
 interface ActivityLog {
   id: string;
@@ -25,6 +26,7 @@ interface Paper {
 }
 
 export default function Analytics() {
+  const { theme } = useTheme();
   const [activities, setActivities] = useState<ActivityLog[]>([]);
   const [papers, setPapers] = useState<Paper[]>([]);
   const [loading, setLoading] = useState(true);
@@ -417,7 +419,7 @@ export default function Analytics() {
                     y1={y} 
                     x2={chartWidth - paddingX} 
                     y2={y} 
-                    stroke="#F1F5F9" 
+                    stroke={theme === 'dark' ? 'rgba(71, 85, 105, 0.4)' : '#F1F5F9'} 
                     strokeWidth="1" 
                     strokeDasharray="4 4"
                   />
@@ -480,14 +482,12 @@ export default function Analytics() {
                       strokeDasharray="3 3"
                       className="opacity-70 animate-fade-in"
                     />
-                  )}
-
-                  {/* Node Background Halo on Hover */}
+                  )}                   {/* Node Background Halo on Hover */}
                   <circle
                     cx={x}
                     cy={y}
                     r={isHovered ? 10 : 0}
-                    fill="#BFDBFE"
+                    fill={theme === 'dark' ? '#1e40af' : '#BFDBFE'}
                     className="transition-all duration-200 opacity-40"
                   />
 
@@ -496,7 +496,7 @@ export default function Analytics() {
                     cx={x}
                     cy={y}
                     r={isHovered ? 5.5 : 4}
-                    fill="#FFFFFF"
+                    fill={theme === 'dark' ? '#0f172a' : '#FFFFFF'}
                     stroke="#2563EB"
                     strokeWidth={isHovered ? 3.5 : 2.5}
                     className="transition-all duration-200 cursor-pointer"
@@ -506,7 +506,7 @@ export default function Analytics() {
                   <text
                     x={x}
                     y={chartHeight - paddingY + 22}
-                    fill={isHovered ? '#1E293B' : '#64748B'}
+                    fill={isHovered ? (theme === 'dark' ? '#F8FAFC' : '#1E293B') : '#64748B'}
                     className={`text-[10px] font-mono transition-colors ${isHovered ? 'font-bold' : 'font-medium'}`}
                     textAnchor="middle"
                   >
