@@ -32,7 +32,7 @@ export const connectDB = async (): Promise<typeof mongoose> => {
   // Validate that process.env.MONGODB_URI is used exclusively (Task 6)
   const MONGODB_URI = process.env.MONGODB_URI;
   if (!MONGODB_URI) {
-    console.error('CRITICAL ERROR: MONGODB_URI environment variable is missing.');
+    console.log('Database Connection Status: MONGODB_URI environment variable is missing.');
     throw new Error('MONGODB_URI environment variable is missing.');
   }
 

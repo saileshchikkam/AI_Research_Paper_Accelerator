@@ -10,9 +10,18 @@ interface ResearchLibraryProps {
   onOpenPaper: (paperId: string) => void;
   onNavigateToTab: (tab: string, arg?: string) => void;
   onStartComparativeChat: () => void;
+  selectedPaperIds: string[];
+  setSelectedPaperIds: React.Dispatch<React.SetStateAction<string[]>>;
 }
 
-export default function ResearchLibrary({ user, onOpenPaper, onNavigateToTab, onStartComparativeChat }: ResearchLibraryProps) {
+export default function ResearchLibrary({ 
+  user, 
+  onOpenPaper, 
+  onNavigateToTab, 
+  onStartComparativeChat,
+  selectedPaperIds,
+  setSelectedPaperIds
+}: ResearchLibraryProps) {
   const [papers, setPapers] = useState<Paper[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
@@ -353,20 +362,35 @@ export default function ResearchLibrary({ user, onOpenPaper, onNavigateToTab, on
                 {/* Header info */}
                 <div>
                   <div className="flex items-start justify-between gap-4">
-                    {/* Folder Badge & Journal */}
-                    <div className="flex flex-col items-start gap-1">
-                      {paperFolder ? (
-                        <span className="px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider text-white" style={{ backgroundColor: paperFolder.color }}>
-                          {paperFolder.name}
+                    {/* Folder Badge & Journal with Checkbox */}
+                    <div className="flex items-center gap-2.5">
+                      <input
+                        type="checkbox"
+                        checked={selectedPaperIds.includes(paper.id)}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          setSelectedPaperIds(prev => 
+                            prev.includes(paper.id) ? prev.filter(id => id !== paper.id) : [...prev, paper.id]
+                          );
+                        }}
+                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-4.5 w-4.5 cursor-pointer shrink-0 transition-all hover:border-blue-400"
+                        title="Select paper for comparison matrix"
+                        id={`library_checkbox_${paper.id}`}
+                      />
+                      <div className="flex flex-col items-start gap-1">
+                        {paperFolder ? (
+                          <span className="px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider text-white" style={{ backgroundColor: paperFolder.color }}>
+                            {paperFolder.name}
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-slate-100 text-slate-500">
+                            Unassigned (Root)
+                          </span>
+                        )}
+                        <span className="text-[10px] text-slate-400 font-medium truncate max-w-[130px] md:max-w-[150px]" title={paper.journal}>
+                          {paper.journal} ({paper.year})
                         </span>
-                      ) : (
-                        <span className="px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-slate-100 text-slate-500">
-                          Unassigned (Root)
-                        </span>
-                      )}
-                      <span className="text-[10px] text-slate-400 font-medium truncate max-w-[150px]" title={paper.journal}>
-                        {paper.journal} ({paper.year})
-                      </span>
+                      </div>
                     </div>
 
                     {/* Bookmark Toggle */}
@@ -468,6 +492,32 @@ export default function ResearchLibrary({ user, onOpenPaper, onNavigateToTab, on
           >
             Launch Upload Portal
           </button>
+        </div>
+      )}
+
+      {selectedPaperIds && selectedPaperIds.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/90 backdrop-blur-md border border-slate-700/50 px-6 py-4 rounded-2xl flex items-center gap-6 shadow-2xl z-40 animate-in fade-in slide-in-from-bottom-4 duration-300 text-white" id="library_floating_selection_bar">
+          <div className="text-left">
+            <p className="text-xs font-bold text-slate-200">{selectedPaperIds.length} paper{selectedPaperIds.length > 1 ? 's' : ''} selected</p>
+            <p className="text-[10px] text-slate-400">Ready to synthesize comparative matrix</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setSelectedPaperIds([])}
+              className="text-xs text-slate-300 hover:text-white font-semibold transition-colors px-3 py-2 hover:bg-slate-800/50 rounded-xl"
+              id="clear_library_selection_btn"
+            >
+              Clear
+            </button>
+            <button
+              onClick={() => onNavigateToTab('synthesis')}
+              className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-2 shadow-md transition-all shrink-0 hover:scale-[1.02] active:scale-[0.98]"
+              id="generate_comparative_matrix_library_btn"
+            >
+              <Sparkles className="w-4 h-4 text-emerald-400 animate-pulse" />
+              Generate Comparative Matrix
+            </button>
+          </div>
         </div>
       )}
     </div>

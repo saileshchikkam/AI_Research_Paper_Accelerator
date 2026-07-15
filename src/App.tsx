@@ -15,6 +15,7 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [activePaperId, setActivePaperId] = useState<string | null>(null);
+  const [selectedPaperIds, setSelectedPaperIds] = useState<string[]>([]);
 
   // Check if session exists in localStorage on mount
   useEffect(() => {
@@ -90,6 +91,8 @@ export default function App() {
               onOpenPaper={handleOpenPaper} 
               onNavigateToTab={handleNavigateToTab}
               onStartComparativeChat={handleStartComparativeChat}
+              selectedPaperIds={selectedPaperIds}
+              setSelectedPaperIds={setSelectedPaperIds}
             />
           )}
 
@@ -97,6 +100,8 @@ export default function App() {
             <LiteratureReviewPage
               user={user}
               onBackToLibrary={() => handleNavigateToTab('library')}
+              selectedPaperIds={selectedPaperIds}
+              setSelectedPaperIds={setSelectedPaperIds}
             />
           )}
 
