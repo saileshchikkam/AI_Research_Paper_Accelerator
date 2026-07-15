@@ -16,6 +16,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [activePaperId, setActivePaperId] = useState<string | null>(null);
   const [selectedPaperIds, setSelectedPaperIds] = useState<string[]>([]);
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
 
   // Check if session exists in localStorage on mount
   useEffect(() => {
@@ -68,12 +69,14 @@ export default function App() {
         setActiveTab={handleNavigateToTab} 
         user={user} 
         onLogout={handleLogout}
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
       />
 
       {/* RIGHT WORKSPACE INTERFACE */}
       <div className="flex-1 flex flex-col overflow-hidden dark:bg-slate-900" id="workspace_right_column">
         {/* UNIFIED TOP CONTEXT HEADER */}
-        <Header activeTab={activeTab} user={user} />
+        <Header activeTab={activeTab} user={user} onToggleSidebar={() => setSidebarOpen(prev => !prev)} />
 
         {/* DETAILED CONTENT VIEWS */}
         <main className="flex-1 overflow-y-auto bg-slate-50/50 dark:bg-slate-950/40" id="main_content_pane">

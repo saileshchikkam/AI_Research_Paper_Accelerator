@@ -28,6 +28,7 @@ export default function PaperViewer({ paperId, onBackToLibrary, userId, onSelect
   const [currentPageNum, setCurrentPageNum] = useState(1);
   const [allPapers, setAllPapers] = useState<Paper[]>([]);
   const [librarySearch, setLibrarySearch] = useState('');
+  const [mobileActiveView, setMobileActiveView] = useState<'document' | 'ai'>('document');
 
   // NotebookLM Interactive Navigation States
   const [showOutline, setShowOutline] = useState(false);
@@ -687,11 +688,35 @@ export default function PaperViewer({ paperId, onBackToLibrary, userId, onSelect
         </div>
       </div>
 
+      {/* MOBILE ONLY VIEW TOGGLE */}
+      <div className="flex lg:hidden bg-slate-100 p-1 rounded-xl mx-6 my-2 shrink-0 border border-slate-200" id="mobile_view_toggle">
+        <button
+          onClick={() => setMobileActiveView('document')}
+          className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+            mobileActiveView === 'document'
+              ? 'bg-white text-blue-600 shadow-sm'
+              : 'text-slate-650 hover:bg-slate-50/50'
+          }`}
+        >
+          Document Viewer
+        </button>
+        <button
+          onClick={() => setMobileActiveView('ai')}
+          className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+            mobileActiveView === 'ai'
+              ? 'bg-white text-blue-600 shadow-sm'
+              : 'text-slate-655 hover:bg-slate-50/50'
+          }`}
+        >
+          AI Companion
+        </button>
+      </div>
+
       {/* MAIN TWO-PANE BODY */}
       <div className="flex-1 flex overflow-hidden" id="workspace_panes_container">
         
         {/* LEFT PANE: Scholarly Document Page-by-Page viewport (50% wide) */}
-        <div className="w-1/2 border-r border-slate-200 flex flex-col justify-between bg-white overflow-hidden relative" id="workspace_doc_pane">
+        <div className={`w-full lg:w-1/2 border-r border-slate-200 flex flex-col justify-between bg-white overflow-hidden relative ${mobileActiveView === 'document' ? 'flex' : 'hidden lg:flex'}`} id="workspace_doc_pane">
           {/* Document page context topbar */}
           <div className="px-6 py-3 bg-slate-50/50 border-b border-slate-100 flex items-center justify-between shrink-0">
             <div className="flex items-center gap-2">
@@ -804,7 +829,7 @@ export default function PaperViewer({ paperId, onBackToLibrary, userId, onSelect
         </div>
 
         {/* RIGHT PANE: Context Tab Command Centers (50% wide) */}
-        <div className="w-1/2 flex flex-col justify-between bg-slate-50 overflow-hidden" id="workspace_command_pane">
+        <div className={`w-full lg:w-1/2 flex flex-col justify-between bg-slate-50 overflow-hidden ${mobileActiveView === 'ai' ? 'flex' : 'hidden lg:flex'}`} id="workspace_command_pane">
           {/* Operational tab switchers header */}
           <div className="bg-white border-b border-slate-200 px-4 flex items-center gap-1 overflow-x-auto shrink-0 scrollbar-none" id="workspace_tabs_bar">
             {[

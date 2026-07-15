@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, Flame, Sparkles, Search, Sun, Moon } from 'lucide-react';
+import { Bell, Flame, Sparkles, Search, Sun, Moon, Menu } from 'lucide-react';
 import { User } from '../types';
 import { useTheme } from '../ThemeContext';
 
 interface HeaderProps {
   activeTab: string;
   user: User;
+  onToggleSidebar?: () => void;
 }
 
-export default function Header({ activeTab, user }: HeaderProps) {
+export default function Header({ activeTab, user, onToggleSidebar }: HeaderProps) {
   const { theme, toggleTheme } = useTheme();
   const [apiKeyOk, setApiKeyOk] = useState<boolean | null>(null);
   const [streakCount] = useState(5);
@@ -93,17 +94,29 @@ export default function Header({ activeTab, user }: HeaderProps) {
   };
 
   return (
-    <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 py-3 flex flex-col md:flex-row md:items-center justify-between gap-3 sticky top-0 z-40" id="top_header_root">
+    <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 md:px-6 py-3 flex flex-col md:flex-row md:items-center justify-between gap-3 sticky top-0 z-40" id="top_header_root">
       {/* Title & Greeting */}
-      <div className="flex flex-col justify-center">
-        <h2 className="font-display font-extrabold text-lg md:text-xl text-slate-950 dark:text-white tracking-tight leading-tight">{getPageTitle()}</h2>
-        {activeTab === 'dashboard' ? (
-          <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5 flex items-center gap-1.5" id="user_greeting_header">
-            {getGreeting()}
-          </p>
-        ) : (
-          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-normal font-medium">{getPageSubtitle()}</p>
+      <div className="flex items-center gap-3">
+        {onToggleSidebar && (
+          <button
+            onClick={onToggleSidebar}
+            className="lg:hidden p-1.5 -ml-1 rounded-xl text-slate-500 hover:text-blue-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800 transition-all shrink-0 cursor-pointer"
+            id="mobile_sidebar_toggle"
+            title="Toggle Menu"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
         )}
+        <div className="flex flex-col justify-center min-w-0">
+          <h2 className="font-display font-extrabold text-lg md:text-xl text-slate-950 dark:text-white tracking-tight leading-tight truncate">{getPageTitle()}</h2>
+          {activeTab === 'dashboard' ? (
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5 flex items-center gap-1.5 truncate" id="user_greeting_header">
+              {getGreeting()}
+            </p>
+          ) : (
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-normal font-medium truncate">{getPageSubtitle()}</p>
+          )}
+        </div>
       </div>
 
       {/* Quick Metrics & Badges / Dashboard header content */}
