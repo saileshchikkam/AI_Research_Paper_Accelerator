@@ -6,6 +6,10 @@ export interface User {
   role: 'student' | 'professor' | 'researcher' | 'engineer';
   avatar?: string;
   enrolledAt: string;
+  username?: string;
+  university?: string;
+  department?: string;
+  bio?: string;
 }
 
 export interface Paper {

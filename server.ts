@@ -299,7 +299,7 @@ app.get('/api/auth/profile', authenticate, async (req: AuthRequest, res: Respons
 
 app.put('/api/auth/profile', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { name, avatar, role } = req.body;
+    const { name, email, avatar, role, username, university, department, bio } = req.body;
     
     // Explicitly await database connection singleton status
     await connectDB();
@@ -308,9 +308,61 @@ app.put('/api/auth/profile', authenticate, async (req: AuthRequest, res: Respons
     if (!user) {
       return res.status(404).json({ success: false, error: 'User not found' });
     }
-    if (name) user.name = name;
-    if (avatar) user.avatar = avatar;
-    if (role) user.role = role;
+
+    // Input Validation
+    if (name !== undefined) {
+      if (typeof name !== 'string' || name.trim() === '') {
+        return res.status(400).json({ success: false, error: 'Name cannot be empty' });
+      }
+      user.name = name.trim();
+    }
+
+    if (username !== undefined) {
+      if (typeof username !== 'string' || username.trim() === '') {
+        return res.status(400).json({ success: false, error: 'Username cannot be empty' });
+      }
+      user.username = username.trim();
+    }
+
+    if (email !== undefined) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return res.status(400).json({ success: false, error: 'Invalid email address format' });
+      }
+      // Check for duplicate email
+      const existingUser = await UserModel.findOne({ 
+        email: email.toLowerCase().trim(), 
+        _id: { $ne: req.userId } 
+      });
+      if (existingUser) {
+        return res.status(400).json({ success: false, error: 'Email address is already in use' });
+      }
+      user.email = email.toLowerCase().trim();
+    }
+
+    if (avatar !== undefined) {
+      user.avatar = avatar;
+    }
+
+    if (role !== undefined) {
+      if (!['student', 'professor', 'researcher', 'engineer'].includes(role)) {
+        return res.status(400).json({ success: false, error: 'Invalid user role selected' });
+      }
+      user.role = role as any;
+    }
+
+    if (university !== undefined) {
+      user.university = typeof university === 'string' ? university.trim() : '';
+    }
+
+    if (department !== undefined) {
+      user.department = typeof department === 'string' ? department.trim() : '';
+    }
+
+    if (bio !== undefined) {
+      user.bio = typeof bio === 'string' ? bio.trim() : '';
+    }
+
     await user.save();
     res.json({ success: true, user: user.toJSON() });
   } catch (err: any) {

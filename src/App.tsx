@@ -122,6 +122,10 @@ export default function App() {
             <Profile 
               user={user}
               onOpenPaper={handleOpenPaper}
+              onUserUpdate={(updatedUser: User) => {
+                setUser(updatedUser);
+                localStorage.setItem('researchmind_user', JSON.stringify(updatedUser));
+              }}
             />
           )}
 

@@ -10,6 +10,10 @@ export interface IUser {
   avatar?: string;
   enrolledAt: Date;
   lastLogin?: Date;
+  username?: string;
+  university?: string;
+  department?: string;
+  bio?: string;
 }
 
 const UserSchema = new Schema<IUser>(
@@ -25,7 +29,11 @@ const UserSchema = new Schema<IUser>(
     },
     avatar: { type: String },
     enrolledAt: { type: Date, default: Date.now },
-    lastLogin: { type: Date }
+    lastLogin: { type: Date },
+    username: { type: String },
+    university: { type: String },
+    department: { type: String },
+    bio: { type: String }
   },
   {
     timestamps: true,
