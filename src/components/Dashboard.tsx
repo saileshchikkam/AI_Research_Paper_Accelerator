@@ -221,42 +221,42 @@ export default function Dashboard({ user, onOpenPaper, onNavigateToTab }: Dashbo
       case 'read':
         return {
           title: act.detail || "PDF Research Paper Ingested",
-          icon: <FileText className="w-4 h-4 text-blue-500" />,
+          icon: <FileText className="w-3.5 h-3.5 text-blue-500" />,
           bg: "bg-blue-50/70 border border-blue-100/50",
           badge: "✓ Ingested"
         };
       case 'chat':
         return {
           title: act.detail || "AI Research Conversation",
-          icon: <Sparkles className="w-4 h-4 text-purple-500 animate-pulse" />,
+          icon: <Sparkles className="w-3.5 h-3.5 text-purple-500 animate-pulse" />,
           bg: "bg-purple-50/70 border border-purple-100/50",
           badge: "✓ Grounded"
         };
       case 'quiz':
         return {
           title: act.detail || "Academic Practice Quiz",
-          icon: <CheckCircle2 className="w-4 h-4 text-amber-500" />,
+          icon: <CheckCircle2 className="w-3.5 h-3.5 text-amber-500" />,
           bg: "bg-amber-50/70 border border-amber-100/50",
           badge: "✓ Scored"
         };
       case 'note':
         return {
           title: act.detail || "Document Annotation Created",
-          icon: <BookOpen className="w-4 h-4 text-emerald-500" />,
+          icon: <BookOpen className="w-3.5 h-3.5 text-emerald-500" />,
           bg: "bg-emerald-50/70 border border-emerald-100/50",
           badge: "✓ Persisted"
         };
       case 'flashcard':
         return {
           title: act.detail || "Recall Review Completed",
-          icon: <Timer className="w-4 h-4 text-indigo-500" />,
+          icon: <Timer className="w-3.5 h-3.5 text-indigo-500" />,
           bg: "bg-indigo-50/70 border border-indigo-100/50",
           badge: "✓ Reviewed"
         };
       default:
         return {
           title: act.detail || "Workspace Study Activity",
-          icon: <Activity className="w-4 h-4 text-slate-500" />,
+          icon: <Activity className="w-3.5 h-3.5 text-slate-500" />,
           bg: "bg-slate-50/70 border border-slate-100/50",
           badge: "✓ Processed"
         };
@@ -276,360 +276,338 @@ export default function Dashboard({ user, onOpenPaper, onNavigateToTab }: Dashbo
   };
 
   return (
-    <div className="p-8 space-y-8 max-w-7xl mx-auto" id="dashboard_root">
+    <div className="p-6 space-y-6 max-w-7xl mx-auto" id="dashboard_root">
       {/* CAPSTONE ADVISORY NOTICE BANNER */}
-      <div className="bg-blue-600 rounded-3xl p-6 text-white shadow-xl shadow-blue-500/10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative overflow-hidden" id="dashboard_welcome_banner">
+      <div className="bg-blue-600 rounded-3xl p-5 text-white shadow-xl shadow-blue-500/10 flex flex-col md:flex-row items-start md:items-center justify-between gap-5 relative overflow-hidden" id="dashboard_welcome_banner">
         <div className="absolute right-0 bottom-0 top-0 opacity-10 flex items-center pointer-events-none">
           <Sparkles className="w-64 h-64 translate-x-12 translate-y-12" />
         </div>
-        <div className="space-y-2 relative z-10 text-left">
+        <div className="space-y-1.5 relative z-10 text-left">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/30 text-xs font-bold uppercase tracking-wider">
             <Sparkles className="w-3.5 h-3.5 animate-spin" />
             Adaptive AI Recommender
           </div>
-          <h3 className="font-display font-black text-2xl">
+          <h3 className="font-display font-black text-xl">
             Welcome back, {user.name}!
           </h3>
-          <p className="text-sm text-blue-100 max-w-2xl font-medium">
+          <p className="text-xs text-blue-100 max-w-2xl font-medium leading-relaxed">
             Based on your role as <span className="underline font-bold">{user.role}</span>, we recommend conducting a comparative review on <strong className="text-white font-bold">RAG Formulations</strong> today. You have a study assessment due on Attention mechanisms!
           </p>
         </div>
         <button 
           onClick={() => onNavigateToTab('library')}
-          className="bg-white hover:bg-slate-100 text-blue-700 font-bold px-5 py-3 rounded-2xl text-xs flex items-center gap-2 shadow-md hover:scale-[1.02] active:scale-[0.98] transition-all relative z-10 shrink-0 self-start md:self-center"
+          className="bg-white hover:bg-slate-100 text-blue-700 font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 shadow-md hover:scale-[1.02] active:scale-[0.98] transition-all relative z-10 shrink-0 self-start md:self-center"
           id="banner_action_btn"
         >
           Enter Library
-          <ArrowRight className="w-4 h-4" />
+          <ArrowRight className="w-3.5 h-3.5" />
         </button>
       </div>
 
       {/* CORE STATS GRID */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6" id="dashboard_stats_grid">
-        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4 glow-card transition-all text-left">
-          <div className="bg-blue-50 text-blue-600 p-4 rounded-2xl flex items-center justify-center shrink-0">
-            <FileText className="w-6 h-6" />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5" id="dashboard_stats_grid">
+        <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4 glow-card transition-all text-left">
+          <div className="bg-blue-50 text-blue-600 p-3.5 rounded-2xl flex items-center justify-center shrink-0">
+            <FileText className="w-5.5 h-5.5" />
           </div>
           <div>
-            <span className="text-xs text-slate-400 font-mono uppercase tracking-wider font-semibold">Total Documents</span>
-            <h4 className="text-2xl font-extrabold text-slate-900 mt-1">{totalDocumentsCount}</h4>
-            <p className="text-[10px] text-slate-500 mt-1 font-medium">Verified uploaded files</p>
+            <span className="text-[10px] text-slate-400 font-mono uppercase tracking-wider font-semibold">Total Documents</span>
+            <h4 className="text-xl font-extrabold text-slate-900 mt-0.5">{totalDocumentsCount}</h4>
+            <p className="text-[9px] text-slate-500 mt-0.5 font-medium">Verified uploaded files</p>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4 glow-card transition-all text-left">
-          <div className="bg-emerald-50 text-emerald-600 p-4 rounded-2xl flex items-center justify-center shrink-0">
-            <FolderHeart className="w-6 h-6" />
+        <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4 glow-card transition-all text-left">
+          <div className="bg-emerald-50 text-emerald-600 p-3.5 rounded-2xl flex items-center justify-center shrink-0">
+            <FolderHeart className="w-5.5 h-5.5" />
           </div>
           <div>
-            <span className="text-xs text-slate-400 font-mono uppercase tracking-wider font-semibold">Library Folders</span>
-            <h4 className="text-2xl font-extrabold text-slate-900 mt-1">{libraryFoldersCount}</h4>
-            <p className="text-[10px] text-slate-500 mt-1 font-medium">Segmented categories</p>
+            <span className="text-[10px] text-slate-400 font-mono uppercase tracking-wider font-semibold">Library Folders</span>
+            <h4 className="text-xl font-extrabold text-slate-900 mt-0.5">{libraryFoldersCount}</h4>
+            <p className="text-[9px] text-slate-500 mt-0.5 font-medium">Segmented categories</p>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4 glow-card transition-all text-left">
-          <div className="bg-amber-50 text-amber-600 p-4 rounded-2xl flex items-center justify-center shrink-0">
-            <CheckCircle2 className="w-6 h-6" />
+        <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4 glow-card transition-all text-left">
+          <div className="bg-amber-50 text-amber-600 p-3.5 rounded-2xl flex items-center justify-center shrink-0">
+            <CheckCircle2 className="w-5.5 h-5.5" />
           </div>
           <div>
-            <span className="text-xs text-slate-400 font-mono uppercase tracking-wider font-semibold">Quizzes Taken</span>
-            <h4 className="text-2xl font-extrabold text-slate-900 mt-1">{quizzesTakenCount}</h4>
-            <p className="text-[10px] text-slate-500 mt-1 font-medium">Assessment feedback logs</p>
+            <span className="text-[10px] text-slate-400 font-mono uppercase tracking-wider font-semibold">Quizzes Taken</span>
+            <h4 className="text-xl font-extrabold text-slate-900 mt-0.5">{quizzesTakenCount}</h4>
+            <p className="text-[9px] text-slate-500 mt-0.5 font-medium">Assessment feedback logs</p>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4 glow-card transition-all text-left">
-          <div className="bg-purple-50 text-purple-600 p-4 rounded-2xl flex items-center justify-center shrink-0">
-            <Clock className="w-6 h-6" />
+        <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4 glow-card transition-all text-left">
+          <div className="bg-purple-50 text-purple-600 p-3.5 rounded-2xl flex items-center justify-center shrink-0">
+            <Clock className="w-5.5 h-5.5" />
           </div>
           <div>
-            <span className="text-xs text-slate-400 font-mono uppercase tracking-wider font-semibold">Study Hours</span>
-            <h4 className="text-2xl font-extrabold text-slate-900 mt-1">{studyHoursVal}</h4>
-            <p className="text-[10px] text-slate-500 mt-1 font-medium">Calculated active focus</p>
+            <span className="text-[10px] text-slate-400 font-mono uppercase tracking-wider font-semibold">Study Hours</span>
+            <h4 className="text-xl font-extrabold text-slate-900 mt-0.5">{studyHoursVal}</h4>
+            <p className="text-[9px] text-slate-500 mt-0.5 font-medium">Calculated active focus</p>
           </div>
         </div>
       </div>
 
-      {/* MID SECTION: SAS INGESTION PORTAL (LEFT 50%) & STUDY LOG STREAM (RIGHT 50%) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8" id="dashboard_mid_grid">
-        {/* SAS Ingestion Portal */}
-        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm text-left flex flex-col justify-between" id="sas_ingestion_portal">
-          <div>
+      {/* MID SECTION: SAS INGESTION PORTAL (LEFT) & STUDY LOG STREAM (RIGHT) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch" id="dashboard_mid_grid">
+        {/* SaaS Ingestion Portal */}
+        <div className="lg:col-span-7 bg-white p-5 rounded-3xl border border-slate-200 shadow-sm text-left flex flex-col justify-between h-full" id="sas_ingestion_portal">
+          <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h4 className="font-display font-black text-lg text-slate-900 flex items-center gap-2">
-                <FileUp className="w-5 h-5 text-blue-600 animate-bounce" />
+              <h4 className="font-display font-black text-base text-slate-900 flex items-center gap-2">
+                <FileUp className="w-4.5 h-4.5 text-blue-600 animate-bounce" />
                 SaaS Ingestion Portal
               </h4>
-              <span className="text-[9px] bg-blue-50 text-blue-600 font-mono font-bold uppercase tracking-wider px-2 py-1 rounded">
+              <span className="text-[8px] bg-blue-50 text-blue-600 font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded">
                 PDF Upload
               </span>
             </div>
-            <p className="text-xs text-slate-500 mt-1">
+            <p className="text-xs text-slate-500 leading-normal">
               Drag PDFs/files or enter text parameters. Gemini will auto-generate dense scholarly chapters with full semantic text vectors.
             </p>
-          </div>
 
-          <form onSubmit={handleUploadSubmit} className="space-y-4 mt-4" id="upload_portal_form">
-            {uploadError && (
-              <div className="p-3 bg-red-50 border border-red-100 text-red-600 rounded-xl text-xs font-semibold flex items-center gap-1.5">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                {uploadError}
-              </div>
-            )}
-            {uploadSuccess && (
-              <div className="p-3 bg-emerald-50 border border-emerald-100 text-emerald-700 rounded-xl text-xs font-semibold flex items-center gap-1.5">
-                <CheckCircle2 className="w-4 h-4 shrink-0" />
-                {uploadSuccess}
-              </div>
-            )}
+            <form onSubmit={handleUploadSubmit} className="space-y-3.5" id="upload_portal_form">
+              {uploadError && (
+                <div className="p-2.5 bg-red-50 border border-red-100 text-red-600 rounded-xl text-[11px] font-semibold flex items-center gap-1.5">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  {uploadError}
+                </div>
+              )}
+              {uploadSuccess && (
+                <div className="p-2.5 bg-emerald-50 border border-emerald-100 text-emerald-700 rounded-xl text-[11px] font-semibold flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                  {uploadSuccess}
+                </div>
+              )}
 
-            {isUploading ? (
-              /* Active Upload Animation & Step Progress */
-              <div className="border border-slate-100 bg-slate-50/50 rounded-2xl p-6 text-center space-y-4 flex flex-col justify-center min-h-[140px]" id="uploading_progress_area">
-                <div className="relative w-12 h-12 mx-auto">
-                  <div className="absolute inset-0 rounded-full border-4 border-blue-100"></div>
-                  <div className="absolute inset-0 rounded-full border-4 border-t-blue-600 animate-spin"></div>
-                  <Sparkles className="absolute inset-0 m-auto w-5 h-5 text-blue-500 animate-pulse" />
+              {isUploading ? (
+                /* Active Upload Animation & Step Progress */
+                <div className="border border-slate-100 bg-slate-50/50 rounded-2xl p-5 text-center space-y-3 flex flex-col justify-center min-h-[160px]" id="uploading_progress_area">
+                  <div className="relative w-10 h-10 mx-auto">
+                    <div className="absolute inset-0 rounded-full border-4 border-blue-100"></div>
+                    <div className="absolute inset-0 rounded-full border-4 border-t-blue-600 animate-spin"></div>
+                    <Sparkles className="absolute inset-0 m-auto w-4 h-4 text-blue-500 animate-pulse" />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs font-bold text-slate-800 animate-pulse">{uploadSteps[uploadStep]}</p>
+                    <p className="text-[9px] text-slate-400 font-mono">Step {uploadStep + 1} of {uploadSteps.length}</p>
+                  </div>
+                  <div className="w-full bg-slate-200 rounded-full h-1 overflow-hidden">
+                    <div 
+                      className="bg-blue-600 h-1 rounded-full transition-all duration-300"
+                      style={{ width: `${((uploadStep + 1) / uploadSteps.length) * 100}%` }}
+                    />
+                  </div>
                 </div>
-                <div className="space-y-1.5">
-                  <p className="text-xs font-bold text-slate-800 animate-pulse">{uploadSteps[uploadStep]}</p>
-                  <p className="text-[10px] text-slate-400 font-mono">Step {uploadStep + 1} of {uploadSteps.length}</p>
+              ) : (
+                /* Custom Expanded Drag and Drop Box */
+                <div 
+                  onDragEnter={handleDrag}
+                  onDragOver={handleDrag}
+                  onDragLeave={handleDrag}
+                  onDrop={handleDrop}
+                  className={`border-2 border-dashed rounded-2xl p-5 text-center transition-all relative cursor-pointer min-h-[160px] flex flex-col justify-center items-center ${
+                    dragActive ? 'border-blue-500 bg-blue-50/20 shadow-inner scale-[0.99]' : 'border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  <input 
+                    type="file" 
+                    onChange={handleFileChange}
+                    accept=".pdf,.txt,.md"
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                    id="file_input_field"
+                  />
+                  <FileUp className="w-7 h-7 text-blue-500 mx-auto mb-1.5 duration-200" />
+                  <p className="text-xs font-bold text-slate-700">
+                    {uploadTitle ? `Selected: ${uploadTitle.substring(0, 45)}...` : 'Drag & drop research paper PDF'}
+                  </p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">or click to browse local files</p>
+                  <p className="text-[9px] text-slate-300 mt-1.5">Supported Formats: PDF, TXT, MD • Max 50MB</p>
                 </div>
-                <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
-                  <div 
-                    className="bg-blue-600 h-1.5 rounded-full transition-all duration-300"
-                    style={{ width: `${((uploadStep + 1) / uploadSteps.length) * 100}%` }}
+              )}
+
+              {/* Title */}
+              <div>
+                <label className="block text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-1">Document Title</label>
+                <input 
+                  type="text" 
+                  value={uploadTitle}
+                  onChange={e => { setUploadTitle(e.target.value); setUploadError(''); }}
+                  placeholder="e.g. Attention Is All You Need"
+                  className="w-full px-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                  disabled={isUploading}
+                  id="upload_title_field"
+                />
+              </div>
+
+              {/* Optional Metadata Grid */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-1">Authors</label>
+                  <input 
+                    type="text" 
+                    value={uploadAuthors}
+                    onChange={e => setUploadAuthors(e.target.value)}
+                    placeholder="e.g. Vaswani et al."
+                    className="w-full px-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    disabled={isUploading}
+                    id="upload_authors_field"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-1">Publish Year</label>
+                  <input 
+                    type="number" 
+                    value={uploadYear}
+                    onChange={e => setUploadYear(Number(e.target.value))}
+                    className="w-full px-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    disabled={isUploading}
+                    id="upload_year_field"
                   />
                 </div>
               </div>
-            ) : (
-              /* Custom Expanded Drag and Drop Box */
-              <div 
-                onDragEnter={handleDrag}
-                onDragOver={handleDrag}
-                onDragLeave={handleDrag}
-                onDrop={handleDrop}
-                className={`border-2 border-dashed rounded-2xl p-6 text-center transition-all relative cursor-pointer min-h-[140px] flex flex-col justify-center items-center ${
-                  dragActive ? 'border-blue-500 bg-blue-50/20 shadow-inner scale-[0.99]' : 'border-slate-200 hover:border-slate-300'
-                }`}
+
+              {/* Folder Destination & Text Input Toggle */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-1">Assign Folder</label>
+                  <select 
+                    value={selectedFolderId}
+                    onChange={e => setSelectedFolderId(e.target.value)}
+                    className="w-full px-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                    disabled={isUploading}
+                    id="upload_folder_field"
+                  >
+                    <option value="">(None - Root)</option>
+                    {userFolders.map(f => (
+                      <option key={f.id} value={f.id}>{f.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-1">Journal Venue</label>
+                  <input 
+                    type="text" 
+                    value={uploadJournal}
+                    onChange={e => setUploadJournal(e.target.value)}
+                    placeholder="e.g. NeurIPS, arXiv"
+                    className="w-full px-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    disabled={isUploading}
+                    id="upload_journal_field"
+                  />
+                </div>
+              </div>
+
+              {/* Optional text area */}
+              <div>
+                <label className="block text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-1">Optional Plain Text Copy</label>
+                <textarea
+                  value={uploadTextContent}
+                  onChange={e => setUploadTextContent(e.target.value)}
+                  placeholder="Paste text contents here. If left empty, Gemini will auto-generate complete scholarly paper chapters for you based on the title!"
+                  className="w-full h-20 px-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none font-mono leading-relaxed"
+                  disabled={isUploading}
+                  id="upload_raw_content_field"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={isUploading}
+                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 rounded-xl shadow-md transition-colors text-xs flex items-center justify-center gap-1.5 disabled:opacity-50"
+                id="upload_submit_btn"
               >
-                <input 
-                  type="file" 
-                  onChange={handleFileChange}
-                  accept=".pdf,.txt,.md"
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                  id="file_input_field"
-                />
-                <FileUp className="w-8 h-8 text-blue-500 mx-auto mb-2 group-hover:scale-110 duration-200" />
-                <p className="text-xs font-bold text-slate-700">
-                  {uploadTitle ? `Selected: ${uploadTitle.substring(0, 35)}...` : 'Drag & drop research paper PDF'}
-                </p>
-                <p className="text-[10px] text-slate-400 mt-1">or click to browse local files</p>
-                <p className="text-[9px] text-slate-300 mt-2">Supported Formats: PDF, TXT, MD • Max 50MB</p>
-              </div>
-            )}
-
-            {/* Title */}
-            <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Document Title</label>
-              <input 
-                type="text" 
-                value={uploadTitle}
-                onChange={e => { setUploadTitle(e.target.value); setUploadError(''); }}
-                placeholder="e.g. Attention Is All You Need"
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-                disabled={isUploading}
-                id="upload_title_field"
-              />
-            </div>
-
-            {/* Optional Metadata Grid */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Authors</label>
-                <input 
-                  type="text" 
-                  value={uploadAuthors}
-                  onChange={e => setUploadAuthors(e.target.value)}
-                  placeholder="e.g. Vaswani et al."
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  disabled={isUploading}
-                  id="upload_authors_field"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Publish Year</label>
-                <input 
-                  type="number" 
-                  value={uploadYear}
-                  onChange={e => setUploadYear(Number(e.target.value))}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  disabled={isUploading}
-                  id="upload_year_field"
-                />
-              </div>
-            </div>
-
-            {/* Folder Destination & Text Input Toggle */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Assign Folder</label>
-                <select 
-                  value={selectedFolderId}
-                  onChange={e => setSelectedFolderId(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  disabled={isUploading}
-                  id="upload_folder_field"
-                >
-                  <option value="">(None - Root)</option>
-                  {userFolders.map(f => (
-                    <option key={f.id} value={f.id}>{f.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Journal Venue</label>
-                <input 
-                  type="text" 
-                  value={uploadJournal}
-                  onChange={e => setUploadJournal(e.target.value)}
-                  placeholder="e.g. NeurIPS, arXiv"
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  disabled={isUploading}
-                  id="upload_journal_field"
-                />
-              </div>
-            </div>
-
-            {/* Optional text area */}
-            <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Optional Plain Text Copy</label>
-              <textarea
-                value={uploadTextContent}
-                onChange={e => setUploadTextContent(e.target.value)}
-                placeholder="Paste text contents here. If left empty, Gemini will auto-generate complete scholarly paper chapters for you based on the title!"
-                className="w-full h-16 px-3 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none font-mono"
-                disabled={isUploading}
-                id="upload_raw_content_field"
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={isUploading}
-              className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-xl shadow-md transition-colors text-xs flex items-center justify-center gap-2 disabled:opacity-50"
-              id="upload_submit_btn"
-            >
-              {isUploading ? (
-                <>
-                  <Sparkles className="w-4 h-4 animate-spin" />
-                  Synthesizing & Ingesting Paper...
-                </>
-              ) : (
-                <>
-                  <Plus className="w-4 h-4" />
-                  Ingest Scholarly Paper
-                </>
-              )}
-            </button>
-          </form>
-
-          {/* Recent Upload Status */}
-          {papers.length > 0 && (
-            <div className="mt-5 border-t border-slate-100 pt-4" id="recent_ingest_status">
-              <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2.5">Recent Ingest Status</span>
-              <div className="space-y-2">
-                {papers.slice(0, 2).map(p => (
-                  <div key={p.id} className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-xs">
-                    <div className="flex items-center gap-2 truncate">
-                      <FileText className="w-4 h-4 text-blue-500 shrink-0" />
-                      <div className="truncate">
-                        <p className="font-bold text-slate-700 truncate">{p.title}</p>
-                        <p className="text-[9px] text-slate-400">Indexed {formatRelativeTime(p.uploadedAt)} • {p.size}</p>
-                      </div>
-                    </div>
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-[9px] font-semibold text-emerald-600 border border-emerald-100 flex items-center gap-1 shrink-0">
-                      <span className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse"></span>
-                      Ready
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+                {isUploading ? (
+                  <>
+                    <Sparkles className="w-3.5 h-3.5 animate-spin" />
+                    Synthesizing & Ingesting Paper...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-3.5 h-3.5" />
+                    Ingest Scholarly Paper
+                  </>
+                )}
+              </button>
+            </form>
+          </div>
         </div>
 
         {/* Study Log Stream */}
-        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm text-left flex flex-col justify-between" id="study_log_stream">
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <h4 className="font-display font-black text-lg text-slate-900 flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-blue-600" />
-                Study Log Stream
-              </h4>
-              <span className="text-[9px] bg-slate-100 text-slate-600 font-mono font-bold uppercase tracking-wider px-2 py-1 rounded">
-                Real-time Logs
-              </span>
-            </div>
-            
-            <div className="space-y-3 overflow-y-auto max-h-[500px] pr-1" id="activity_feed">
-              {isLoading ? (
-                /* Loading indicators */
-                Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="flex gap-3 animate-pulse border-b border-slate-100 pb-3">
-                    <div className="w-8 h-8 rounded-xl bg-slate-100 shrink-0" />
-                    <div className="space-y-2 flex-1">
-                      <div className="h-3 bg-slate-100 rounded w-2/3" />
-                      <div className="h-2.5 bg-slate-100 rounded w-1/2" />
-                    </div>
-                  </div>
-                ))
-              ) : userActivities.length > 0 ? (
-                userActivities.map((act) => {
-                  const details = getActivityDetails(act);
-                  return (
-                    <div key={act.id} className="flex gap-3 text-xs pb-3 border-b border-slate-100 last:border-b-0 fade-in-up items-start">
-                      <div className={`p-2 rounded-xl shrink-0 h-8 w-8 flex items-center justify-center ${details.bg}`}>
-                        {details.icon}
+        <div className="lg:col-span-5 bg-white p-5 rounded-3xl border border-slate-200 shadow-sm text-left flex flex-col justify-between h-full" id="study_log_stream">
+          <div className="flex flex-col h-full justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="font-display font-black text-base text-slate-900 flex items-center gap-2">
+                  <Calendar className="w-4.5 h-4.5 text-blue-600" />
+                  Study Log Stream
+                </h4>
+                <span className="text-[8px] bg-slate-100 text-slate-600 font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded">
+                  Real-time Logs
+                </span>
+              </div>
+              
+              <div className="space-y-2 overflow-y-auto max-h-[460px] pr-1" id="activity_feed">
+                {isLoading ? (
+                  /* Loading indicators */
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <div key={i} className="flex gap-2.5 animate-pulse border-b border-slate-100 py-2.5">
+                      <div className="w-7 h-7 rounded-lg bg-slate-100 shrink-0" />
+                      <div className="space-y-1.5 flex-1">
+                        <div className="h-2.5 bg-slate-100 rounded w-2/3" />
+                        <div className="h-2 bg-slate-100 rounded w-1/2" />
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-bold text-slate-800 leading-tight pr-4">{details.title}</p>
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1 text-[10px] text-slate-400">
-                          <span className="font-mono text-slate-500 font-medium max-w-[150px] truncate block" title={act.paperTitle}>
-                            {act.paperTitle}
-                          </span>
-                          <span className="hidden sm:inline">•</span>
-                          <span className="font-mono">{formatRelativeTime(act.timestamp)}</span>
+                    </div>
+                  ))
+                ) : userActivities.length > 0 ? (
+                  userActivities.map((act) => {
+                    const details = getActivityDetails(act);
+                    return (
+                      <div key={act.id} className="flex gap-2.5 text-[11px] py-2 border-b border-slate-100 last:border-b-0 last:pb-0 fade-in-up items-start">
+                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${details.bg}`}>
+                          {details.icon}
                         </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-slate-800 leading-tight pr-3 text-[11px]">{details.title}</p>
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5 text-[9px] text-slate-400">
+                            <span className="font-mono text-slate-500 font-medium max-w-[130px] truncate block" title={act.paperTitle}>
+                              {act.paperTitle}
+                            </span>
+                            <span>•</span>
+                            <span className="font-mono">{formatRelativeTime(act.timestamp)}</span>
+                          </div>
+                        </div>
+                        <span className="text-[8px] font-bold text-slate-400 border border-slate-200 rounded px-1.5 py-0.5 whitespace-nowrap shrink-0 self-start">
+                          {details.badge}
+                        </span>
                       </div>
-                      <span className="text-[9px] font-bold text-slate-400 border border-slate-200 rounded px-1.5 py-0.5 whitespace-nowrap shrink-0 self-start">
-                        {details.badge}
-                      </span>
-                    </div>
-                  );
-                })
-              ) : (
-                /* Elegant Empty State */
-                <div className="py-16 text-center border border-dashed border-slate-100 rounded-2xl bg-slate-50/50">
-                  <Activity className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                  <p className="text-xs font-semibold text-slate-500">No active research logs recorded yet.</p>
-                  <p className="text-[10px] text-slate-400 mt-1">Upload files or review flashcards to populate logs.</p>
-                </div>
-              )}
+                    );
+                  })
+                ) : (
+                  /* Elegant Empty State */
+                  <div className="py-16 text-center border border-dashed border-slate-100 rounded-2xl bg-slate-50/50">
+                    <Activity className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                    <p className="text-[11px] font-semibold text-slate-500">No active research logs recorded yet.</p>
+                    <p className="text-[9px] text-slate-400 mt-1">Upload files or review flashcards to populate logs.</p>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
 
-          <div className="flex items-center justify-between text-xs border-t border-slate-100 pt-4 mt-4" id="study_log_footer">
-            <span className="text-slate-500">Registered Activities: <strong>{userActivities.length}</strong></span>
-            <button 
-              onClick={() => onNavigateToTab('library')}
-              className="text-blue-600 font-bold hover:underline flex items-center gap-1.5 text-xs"
-            >
-              Enter Document Library
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
+            <div className="flex items-center justify-between text-[11px] border-t border-slate-100 pt-3.5 mt-4" id="study_log_footer">
+              <span className="text-slate-500">Registered Activities: <strong>{userActivities.length}</strong></span>
+              <button 
+                onClick={() => onNavigateToTab('library')}
+                className="text-blue-600 font-bold hover:underline flex items-center gap-1 text-[11px]"
+              >
+                Enter Document Library
+                <ArrowRight className="w-3 h-3" />
+              </button>
+            </div>
           </div>
         </div>
       </div>
