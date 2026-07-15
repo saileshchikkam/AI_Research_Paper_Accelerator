@@ -1,3 +1,7 @@
+import dotenv from 'dotenv';
+// Load environment variables immediately on startup (Task 2)
+dotenv.config();
+
 import express, { Request, Response } from 'express';
 import path from 'path';
 import { GoogleGenAI, Type } from '@google/genai';
@@ -10,6 +14,7 @@ import { DocumentProcessor, AIService } from './server-services';
 import { UserModel } from './server/models/User';
 import { generateToken } from './server/utils/jwt';
 import { authenticate, AuthRequest } from './server/middleware/auth';
+import { connectDB } from './server/config/database';
 
 // Lazy-initialized Gemini API client to prevent crash if key is missing on start
 let _aiClient: GoogleGenAI | null = null;
@@ -34,6 +39,21 @@ function getGeminiClient(): GoogleGenAI {
 
 const app = express();
 const PORT = 3000;
+
+// Database connection guarantee middleware to prevent queries before connection (Task 2 & 8)
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (err: any) {
+    console.error("Database connection check middleware failed:", err.message || err);
+    res.status(500).json({
+      success: false,
+      error: "Database Connection Error",
+      message: "The server is currently unable to communicate with the database. Please try again later."
+    });
+  }
+});
 
 // Global Async Error Wrapper Patch for Express 4.x to ensure JSON error responses
 const methods = ['get', 'post', 'put', 'delete', 'patch'] as const;
@@ -1029,6 +1049,33 @@ export { app };
 
 // Only start the server/Vite middleware if we are NOT running on Vercel
 async function startServer() {
+  console.log("Loading Environment Variables...");
+  // Load environment variables (already done via dotenv.config())
+
+  console.log("Checking MONGODB_URI...");
+  if (!process.env.MONGODB_URI) {
+    console.error("CRITICAL ERROR: MONGODB_URI environment variable is missing.");
+    process.exit(1);
+  }
+
+  console.log("Connecting to MongoDB Atlas...");
+  try {
+    await connectDB();
+    console.log("MongoDB Connected Successfully");
+    console.log("Database Ready");
+  } catch (err: any) {
+    console.error("CRITICAL ERROR: Failed to connect to MongoDB on startup:", err.message || err);
+    process.exit(1);
+  }
+
+  // Explicitly trigger MongoDB seeding AFTER successful database connection (Task 2)
+  try {
+    console.log("Seeding Database if needed...");
+    await db.seedMongoDBIfNeeded();
+  } catch (seedErr: any) {
+    console.error("Database seeding failed:", seedErr.message || seedErr);
+  }
+
   if (process.env.VERCEL) {
     console.log("Running in Vercel Serverless environment. Listen skipped.");
     return;
@@ -1050,7 +1097,9 @@ async function startServer() {
     });
   }
 
+  console.log("Starting Express Server...");
   app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server Running on Port ${PORT}`);
     console.log(`ResearchMind AI full-stack server running on http://localhost:${PORT}`);
   });
 }

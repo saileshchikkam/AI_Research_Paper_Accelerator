@@ -1,28 +1,64 @@
 import mongoose from 'mongoose';
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/researchmind';
+// Disable mongoose buffering to eliminate 10000ms buffering timeout issues (Task 3)
+mongoose.set('bufferCommands', false);
+mongoose.set('strictQuery', true);
 
-export const connectDB = async () => {
-  try {
-    mongoose.set('strictQuery', true);
-    
-    // Connect to MongoDB Atlas
-    await mongoose.connect(MONGODB_URI);
-    
-    console.log('MongoDB connected successfully.');
-  } catch (err: any) {
-    console.error('MongoDB connection error:', err.message);
-    console.warn('Continuing server startup. MongoDB will attempt auto-reconnection.');
-  }
-};
+// Mongoose connection event listeners for diagnostics (Task 5)
+mongoose.connection.on('connecting', () => {
+  console.log('MongoDB: Connecting to database...');
+});
+
+mongoose.connection.on('connected', () => {
+  console.log('MongoDB: Connected successfully.');
+});
 
 mongoose.connection.on('disconnected', () => {
-  console.warn('MongoDB disconnected. Retrying connection...');
+  console.warn('MongoDB: Disconnected. Retrying connection...');
+});
+
+mongoose.connection.on('reconnected', () => {
+  console.log('MongoDB: Reconnected successfully.');
 });
 
 mongoose.connection.on('error', (err) => {
-  console.error('MongoDB runtime connection error:', err.message);
+  console.error('MongoDB: Runtime connection error:', err.message || err);
 });
+
+// Cache connection promise to reuse existing connection across serverless invocations (Task 8)
+let cachedConnectionPromise: Promise<typeof mongoose> | null = null;
+
+export const connectDB = async (): Promise<typeof mongoose> => {
+  // Validate that process.env.MONGODB_URI is used exclusively (Task 6)
+  const MONGODB_URI = process.env.MONGODB_URI;
+  if (!MONGODB_URI) {
+    console.error('CRITICAL ERROR: MONGODB_URI environment variable is missing.');
+    process.exit(1);
+  }
+
+  // If already connected, reuse the connection (Task 8)
+  if (mongoose.connection.readyState === 1) {
+    return mongoose;
+  }
+
+  if (cachedConnectionPromise) {
+    return cachedConnectionPromise;
+  }
+
+  console.log('Connecting to MongoDB Atlas...');
+  
+  cachedConnectionPromise = mongoose.connect(MONGODB_URI)
+    .then((m) => {
+      return m;
+    })
+    .catch((err) => {
+      cachedConnectionPromise = null; // Reset cache on failure
+      console.error('CRITICAL ERROR: MongoDB connection failed:', err);
+      process.exit(1); // Exit process with failure (Task 4)
+    });
+
+  return cachedConnectionPromise;
+};
 
 // Graceful shutdown
 process.on('SIGINT', async () => {

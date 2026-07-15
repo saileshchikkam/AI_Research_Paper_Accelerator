@@ -15,8 +15,8 @@ import {
   Quiz, LiteratureReview, SavedCitation, StudyActivity, DashboardMetrics 
 } from './src/types';
 
-// Trigger automatic database connection
-connectDB();
+// Note: Automatic database connection trigger removed. The database connection
+// is now explicitly initialized and awaited on server startup in server.ts (Task 2).
 
 // Initial Seeding Data Constants
 const INITIAL_USERS: User[] = [
@@ -425,9 +425,9 @@ const INITIAL_STUDY_ACTIVITIES: StudyActivity[] = [
 
 class ServerDatabase {
   constructor() {
-    this.seedMongoDBIfNeeded().catch(err => {
-      console.error("Failed to seed MongoDB:", err);
-    });
+    // Note: Automatic seeding in the constructor has been disabled to prevent
+    // queries from running before the MongoDB connection is fully established.
+    // Seeding is now explicitly called on server startup after a successful connection (Task 2).
   }
 
   // Seeding helper for MongoDB
