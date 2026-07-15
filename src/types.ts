@@ -83,6 +83,7 @@ export interface Flashcard {
   answer: string;
   difficulty: 'easy' | 'medium' | 'hard' | null;
   lastReviewed?: string;
+  category?: string;
 }
 
 export interface QuizQuestion {

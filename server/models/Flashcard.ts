@@ -7,6 +7,7 @@ export interface IFlashcard {
   answer: string;
   difficulty: 'easy' | 'medium' | 'hard' | null;
   lastReviewed?: Date;
+  category?: string;
 }
 
 const FlashcardSchema = new Schema<IFlashcard>(
@@ -20,7 +21,8 @@ const FlashcardSchema = new Schema<IFlashcard>(
       enum: ['easy', 'medium', 'hard', null], 
       default: null 
     },
-    lastReviewed: { type: Date }
+    lastReviewed: { type: Date },
+    category: { type: String }
   },
   {
     timestamps: true,

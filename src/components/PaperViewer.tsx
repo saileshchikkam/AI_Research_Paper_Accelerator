@@ -1275,7 +1275,14 @@ export default function PaperViewer({ paperId, onBackToLibrary, userId, onSelect
                   <div className="my-6 space-y-6 flex-1 flex flex-col justify-center">
                     {/* Progress indicator */}
                     <div className="flex items-center justify-between text-xs text-slate-400 font-semibold">
-                      <span>Card {currentCardIdx + 1} of {flashcards.length}</span>
+                      <div className="flex flex-col gap-0.5">
+                        <span>Card {currentCardIdx + 1} of {flashcards.length}</span>
+                        {flashcards[currentCardIdx].category && (
+                          <span className="text-[10px] text-blue-600 font-extrabold tracking-wide uppercase font-sans">
+                            {flashcards[currentCardIdx].category}
+                          </span>
+                        )}
+                      </div>
                       {flashcards[currentCardIdx].difficulty && (
                         <span className={`px-2 py-0.5 rounded uppercase font-mono tracking-wider text-[9px] ${
                           flashcards[currentCardIdx].difficulty === 'easy' ? 'bg-emerald-50 text-emerald-700' :
