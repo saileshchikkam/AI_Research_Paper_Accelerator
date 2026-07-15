@@ -53,17 +53,12 @@ const UserSchema = new Schema<IUser>(
 );
 
 // Pre-save hook to hash password
-UserSchema.pre('save', async function (this: any, next: any) {
+UserSchema.pre('save', async function (this: any) {
   if (!this.isModified('password') || !this.password) {
-    return next();
+    return;
   }
-  try {
-    const salt = await bcrypt.genSalt(10);
-    this.password = await bcrypt.hash(this.password, salt);
-    next();
-  } catch (err: any) {
-    next(err);
-  }
+  const salt = await bcrypt.genSalt(10);
+  this.password = await bcrypt.hash(this.password, salt);
 });
 
 // Compare password method

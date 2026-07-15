@@ -32,17 +32,18 @@ export const connectDB = async (): Promise<typeof mongoose> => {
   // Validate that process.env.MONGODB_URI is used exclusively (Task 6)
   const MONGODB_URI = process.env.MONGODB_URI;
   if (!MONGODB_URI) {
-    if (process.env.NODE_ENV === 'production') {
-      console.error('CRITICAL ERROR: MONGODB_URI environment variable is missing.');
-      process.exit(1);
-    } else {
-      throw new Error('MONGODB_URI environment variable is missing.');
-    }
+    console.error('CRITICAL ERROR: MONGODB_URI environment variable is missing.');
+    throw new Error('MONGODB_URI environment variable is missing.');
   }
 
   // If already connected, reuse the connection (Task 8)
   if (mongoose.connection.readyState === 1) {
     return mongoose;
+  }
+
+  // If the connection is disconnected (0) or disconnecting (3), discard any cached connection promise
+  if (mongoose.connection.readyState === 0 || mongoose.connection.readyState === 3) {
+    cachedConnectionPromise = null;
   }
 
   if (cachedConnectionPromise) {
@@ -57,25 +58,21 @@ export const connectDB = async (): Promise<typeof mongoose> => {
     })
     .catch((err) => {
       cachedConnectionPromise = null; // Reset cache on failure
-      if (process.env.NODE_ENV === 'production') {
-        console.error('CRITICAL ERROR: MongoDB connection failed:', err);
-        process.exit(1); // Exit process with failure (Task 4)
-      } else {
-        throw err;
-      }
+      console.error('CRITICAL ERROR: MongoDB connection failed:', err);
+      throw err;
     });
 
   return cachedConnectionPromise;
 };
 
-// Graceful shutdown
-process.on('SIGINT', async () => {
-  try {
-    await mongoose.connection.close();
-    console.log('MongoDB connection closed due to app termination.');
-    process.exit(0);
-  } catch (err: any) {
-    console.error('Error closing MongoDB connection:', err.message);
-    process.exit(1);
-  }
-});
+// Graceful shutdown (avoid calling process.exit in serverless environments)
+if (!process.env.VERCEL) {
+  process.on('SIGINT', async () => {
+    try {
+      await mongoose.connection.close();
+      console.log('MongoDB connection closed due to app termination.');
+    } catch (err: any) {
+      console.error('Error closing MongoDB connection:', err.message);
+    }
+  });
+}

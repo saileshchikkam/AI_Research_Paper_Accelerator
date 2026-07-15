@@ -41,6 +41,8 @@ const app = express();
 const PORT = 3000;
 
 // Database connection guarantee middleware to prevent queries before connection (Task 2 & 8)
+let hasSeeded = false;
+
 app.use(async (req, res, next) => {
   // Only intercept API requests (Task 2 & 8)
   if (!req.path.startsWith('/api')) {
@@ -51,21 +53,34 @@ app.use(async (req, res, next) => {
   if (!process.env.MONGODB_URI) {
     return res.status(503).json({
       success: false,
-      error: "MONGODB_URI is missing",
-      message: "The MONGODB_URI environment variable is missing. Please configure it in the Settings menu in AI Studio to connect your MongoDB Atlas database."
+      message: "Database connection failed",
+      error: "MONGODB_URI environment variable is missing. Please configure it in the Settings menu in AI Studio."
     });
   }
 
+  let dbConnected = false;
   try {
     await connectDB();
-    next();
+    dbConnected = true;
+    
+    // Non-blocking trigger of MongoDB seeding on the first successful request
+    if (!hasSeeded) {
+      hasSeeded = true;
+      db.seedMongoDBIfNeeded().catch((seedErr: any) => {
+        console.warn("Asynchronous database seeding failed:", seedErr.message || seedErr);
+      });
+    }
   } catch (err: any) {
-    console.warn("Database connection check middleware failed:", err.message || err);
-    res.status(500).json({
+    console.error("Database connection check middleware failed:", err.message || err);
+    return res.status(500).json({
       success: false,
-      error: "Database Connection Error",
-      message: "The server is currently unable to communicate with the database. " + (err.message || err)
+      message: "Database connection failed",
+      error: err.message || String(err)
     });
+  }
+
+  if (dbConnected) {
+    next();
   }
 });
 
@@ -76,12 +91,35 @@ for (const method of methods) {
   (app as any)[method] = function (path: any, ...handlers: any[]) {
     const wrappedHandlers = handlers.map(handler => {
       if (typeof handler === 'function') {
-        return (req: Request, res: Response, next: any) => {
-          Promise.resolve(handler(req, res, next)).catch(next);
-        };
+        if (handler.length === 4) {
+          // Error handler middleware (4 arguments)
+          return (err: any, req: any, res: any, next: any) => {
+            if (typeof next === 'function') {
+              return Promise.resolve(handler(err, req, res, next)).catch(next);
+            } else {
+              const fallbackNext = (error?: any) => {
+                if (error) console.error("Unhandled async error in error handler:", error);
+              };
+              return Promise.resolve(handler(err, req, res, fallbackNext)).catch(fallbackNext);
+            }
+          };
+        } else {
+          // Standard middleware / route handler
+          return (req: any, res: any, next: any) => {
+            if (typeof next === 'function') {
+              return Promise.resolve(handler(req, res, next)).catch(next);
+            } else {
+              const fallbackNext = (err?: any) => {
+                if (err) console.error("Unhandled async error (next is not a function):", err);
+              };
+              return Promise.resolve(handler(req, res, fallbackNext)).catch(fallbackNext);
+            }
+          };
+        }
       }
       return handler;
     });
+
     return original.call(this, path, ...wrappedHandlers);
   };
 }
@@ -153,6 +191,10 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
     if (!email || !password) {
       return res.status(400).json({ success: false, error: 'Email and password are required' });
     }
+    
+    // Explicitly await database connection singleton status
+    await connectDB();
+    
     const user: any = await UserModel.findOne({ email: email.toLowerCase() });
     if (!user) {
       return res.status(401).json({ success: false, error: 'Invalid email or password' });
@@ -180,6 +222,10 @@ app.post('/api/auth/register', async (req: Request, res: Response) => {
     if (!name || !email || !password) {
       return res.status(400).json({ success: false, error: 'Name, email, and password are required' });
     }
+    
+    // Explicitly await database connection singleton status
+    await connectDB();
+    
     const exists = await UserModel.findOne({ email: email.toLowerCase() });
     if (exists) {
       return res.status(400).json({ success: false, error: 'User with this email already exists' });
@@ -218,6 +264,10 @@ app.post('/api/auth/forgot-password', async (req: Request, res: Response) => {
     if (!email) {
       return res.status(400).json({ success: false, error: 'Email is required' });
     }
+    
+    // Explicitly await database connection singleton status
+    await connectDB();
+    
     const user = await UserModel.findOne({ email: email.toLowerCase() });
     if (!user) {
       return res.json({ success: true, message: 'If this email exists in our records, a password reset link has been sent.' });
@@ -234,6 +284,9 @@ app.post('/api/auth/reset-password', (req: Request, res: Response) => {
 
 app.get('/api/auth/profile', authenticate, async (req: AuthRequest, res: Response) => {
   try {
+    // Explicitly await database connection singleton status
+    await connectDB();
+    
     const user = await UserModel.findById(req.userId);
     if (!user) {
       return res.status(404).json({ success: false, error: 'User not found' });
@@ -247,6 +300,10 @@ app.get('/api/auth/profile', authenticate, async (req: AuthRequest, res: Respons
 app.put('/api/auth/profile', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { name, avatar, role } = req.body;
+    
+    // Explicitly await database connection singleton status
+    await connectDB();
+    
     const user = await UserModel.findById(req.userId);
     if (!user) {
       return res.status(404).json({ success: false, error: 'User not found' });
@@ -1060,21 +1117,22 @@ app.use((err: any, req: Request, res: Response, next: any) => {
 
 // Export the Express app for Vercel Serverless Functions
 export { app };
+export default app;
 
 // Only start the server/Vite middleware if we are NOT running on Vercel
 async function startServer() {
+  if (process.env.VERCEL) {
+    console.log("Running in Vercel Serverless environment. Database connections and seeding deferred to middleware requests.");
+    return;
+  }
+
   console.log("Loading Environment Variables...");
   // Load environment variables (already done via dotenv.config())
 
   console.log("Checking MONGODB_URI...");
   const hasMongoUri = !!process.env.MONGODB_URI;
   if (!hasMongoUri) {
-    if (process.env.NODE_ENV === 'production') {
-      console.error("CRITICAL ERROR: MONGODB_URI environment variable is missing.");
-      process.exit(1);
-    } else {
-      console.log("Database connection postponed: MONGODB_URI is not configured in Settings.");
-    }
+    console.error("CRITICAL ERROR: MONGODB_URI environment variable is missing. Database-backed features will be unavailable.");
   }
 
   if (hasMongoUri) {
@@ -1092,12 +1150,7 @@ async function startServer() {
         console.warn("Database seeding failed:", seedErr.message || seedErr);
       }
     } catch (err: any) {
-      if (process.env.NODE_ENV === 'production') {
-        console.error("CRITICAL ERROR: Failed to connect to MongoDB on startup:", err.message || err);
-        process.exit(1);
-      } else {
-        console.log("Database connection postponed: Could not connect to MongoDB Atlas on startup.");
-      }
+      console.error("CRITICAL ERROR: Failed to connect to MongoDB on startup:", err.message || err);
     }
   } else {
     console.log("Skipping MongoDB connection on startup because MONGODB_URI is not configured.");
