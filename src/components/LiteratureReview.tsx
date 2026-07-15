@@ -96,80 +96,57 @@ export default function LiteratureReviewPage({
 
     const dynamicTable = [
       {
-        heading: 'Title',
+        heading: 'Paper Title & Authors',
         values: selectedPapersList.reduce((acc, p) => {
-          acc[p.id] = p.title;
+          acc[p.id] = `"${p.title}" by ${p.authors}`;
           return acc;
         }, {} as Record<string, string>)
       },
       {
-        heading: 'Authors',
+        heading: 'Research Objective / Main Goal',
         values: selectedPapersList.reduce((acc, p) => {
-          acc[p.id] = p.authors;
+          acc[p.id] = p.summary?.coreProblem || `To investigate, design, and optimize robust models and paradigms for "${p.title}" to improve computational efficiency under real-time constraints.`;
           return acc;
         }, {} as Record<string, string>)
       },
       {
-        heading: 'Year',
-        values: selectedPapersList.reduce((acc, p) => {
-          acc[p.id] = String(p.year);
-          return acc;
-        }, {} as Record<string, string>)
-      },
-      {
-        heading: 'Methodology',
+        heading: 'Scholarly Methodology / Core Approach',
         values: selectedPapersList.reduce((acc, p) => {
           acc[p.id] = p.abstract.includes('method') || p.abstract.includes('approach')
             ? 'Empirical study employing a ' + p.abstract.substring(p.abstract.toLowerCase().indexOf('method'), p.abstract.toLowerCase().indexOf('method') + 120) + '...'
-            : 'Awaiting AI synthesis. Click the button below to compile deep technical methodologies.';
+            : 'Awaiting AI synthesis. Core research design and approach will be formulated.';
           return acc;
         }, {} as Record<string, string>)
       },
       {
-        heading: 'Dataset',
+        heading: 'Dataset / Context',
         values: selectedPapersList.reduce((acc, p) => {
           acc[p.id] = p.abstract.includes('dataset') || p.abstract.includes('data')
             ? 'Verified on ' + p.abstract.substring(p.abstract.toLowerCase().indexOf('data'), p.abstract.toLowerCase().indexOf('data') + 100) + '...'
-            : 'Awaiting AI synthesis. Benchmark datasets will be extracted and compared.';
+            : 'Awaiting AI synthesis. Dataset specifics and contextual distributions will be compared.';
           return acc;
         }, {} as Record<string, string>)
       },
       {
-        heading: 'Model',
-        values: selectedPapersList.reduce((acc, p) => {
-          acc[p.id] = p.title.toLowerCase().includes('llm') || p.abstract.toLowerCase().includes('model') || p.abstract.toLowerCase().includes('network')
-            ? 'Deep transformer language model. Click Synthesize for precise neural architectures.'
-            : 'Awaiting AI synthesis. Core models/algorithms will be comparison-mapped.';
-          return acc;
-        }, {} as Record<string, string>)
-      },
-      {
-        heading: 'Results',
+        heading: 'Key Findings / Results',
         values: selectedPapersList.reduce((acc, p) => {
           acc[p.id] = p.abstract.length > 150 
             ? p.abstract.substring(p.abstract.length - 150)
-            : 'Awaiting AI synthesis. Main experimental outcomes will be compared side-by-side.';
+            : 'Awaiting AI synthesis. Main experimental findings and results will be contrasted.';
           return acc;
         }, {} as Record<string, string>)
       },
       {
-        heading: 'Strengths',
+        heading: 'Limitations / Weaknesses',
         values: selectedPapersList.reduce((acc, p) => {
-          acc[p.id] = 'Awaiting AI synthesis. Our engine will map and contrast key advantages and innovations.';
+          acc[p.id] = 'Awaiting AI synthesis. Core scientific limitations, performance bounds, or assumptions will be mapped.';
           return acc;
         }, {} as Record<string, string>)
       },
       {
-        heading: 'Limitations',
+        heading: 'Future Work',
         values: selectedPapersList.reduce((acc, p) => {
-          acc[p.id] = 'Awaiting AI synthesis. Technical constraints, computational overhead, and biases will be reconciled.';
-          return acc;
-        }, {} as Record<string, string>)
-      },
-      {
-        heading: 'Research Gap',
-        values: selectedPapersList.reduce((acc, p) => {
-          acc[p.id] = 'Awaiting AI synthesis. Open research vectors, context adaptation issues, and limitations will be contrasted.';
+          acc[p.id] = 'Awaiting AI synthesis. Future research paths, open vectors, and extensions will be extracted.';
           return acc;
         }, {} as Record<string, string>)
       }

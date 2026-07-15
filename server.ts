@@ -408,18 +408,78 @@ app.post('/api/papers', async (req: Request, res: Response) => {
   }
 
   let extractedText = rawContent || '';
+  const isShortOrUnstructured = !extractedText.trim() || extractedText.length < 600 || !extractedText.includes('--- PAGE BREAK ---');
   
-  // Fallback: If no raw text content was supplied, use Gemini to synthesize a realistic text representation of the paper!
-  if (!extractedText.trim()) {
+  if (isShortOrUnstructured) {
     try {
       const ai = getGeminiClient();
-      const prompt = `You are a research paper synthesizer. Write a highly realistic, technical, academic text simulation of a research paper titled "${title}" written by "${authors || 'Anonymous'}" published in "${journal || 'Academic Proceedings'}" in ${year || 2026}.
-      Generate 4 pages of realistic, dense scholarly content, formatted in Markdown with section numbers:
-      Page 1: Title, Abstract, Keywords, and Introduction (dense academic style, formulas, technical details).
-      Page 2: Proposed Methodology, formulas, architectures, and design.
-      Page 3: Experiments, Quantitative evaluation tables, results, and analysis.
-      Page 4: Related Work, Conclusion, Future Work, and citations/references.
-      Separate each page explicitly with the line: "--- PAGE BREAK ---".`;
+      const prompt = `You are an expert research paper synthesizer. Write a highly realistic, technical, academic text simulation of a research paper.
+      The paper title is "${title}", written by "${authors || 'Anonymous'}" published in "${journal || 'Academic Proceedings'}" in ${year || 2026}.
+      ${extractedText.trim() ? `Use the following provided context or abstract as inspiration:\n"${extractedText.trim()}"\n` : ''}
+      
+      The generated document MUST be extremely detailed and dense (at least 600-800 words in total), written in a professional, scholarly, and rigorous style.
+      You MUST structure the paper into exactly 4 pages, separated by the exact delimiter "--- PAGE BREAK ---".
+      Each section must be fully written out with paragraphs of dense technical text. Do NOT use placeholders, empty summaries, or brief bullet lists. Write actual, readable academic text.
+      
+      Ensure that the following sections are explicitly represented across the pages:
+      - Paper Title & Authors
+      - Abstract (around 100 words summarizing the paper's goal, approach, and findings)
+      - Introduction
+      - Problem Statement
+      - Methodology
+      - Model (detailing the architecture or conceptual components)
+      - Dataset
+      - Experimental Results (with realistic details, numbers, or performance metrics)
+      - Key Findings
+      - Conclusion
+      - Future Scope
+
+      Distribute the content across 4 pages like this:
+      Page 1:
+      # ${title}
+      Authors: ${authors || 'Anonymous'}
+      Journal: ${journal || 'Academic Proceedings'} (${year || 2026})
+      
+      ## Abstract
+      [Dense, technical abstract paragraph of 100 words]
+      
+      ## 1. Introduction
+      [Dense scholarly introduction paragraphs explaining the domain]
+      
+      ## 2. Problem Statement
+      [Clear definition of the specific challenges or gaps addressed by the work]
+      
+      --- PAGE BREAK ---
+      
+      ## 3. Methodology
+      [Deep academic explanation of the design choices, pipeline flow, and theoretical backing]
+      
+      ## 4. Model Architecture
+      [Technical detail of the network layers, algorithmic processes, or mathematical equations]
+      
+      ## 5. Dataset
+      [Descriptions of datasets, preprocessing steps, and sample distributions]
+      
+      --- PAGE BREAK ---
+      
+      ## 6. Experimental Results & Setup
+      [Details of the experimental setup, parameters, evaluation metrics, and comparative scores]
+      
+      ## 7. Key Findings
+      [Detailed discussion of the main quantitative or qualitative improvements and breakthroughs]
+      
+      --- PAGE BREAK ---
+      
+      ## 8. Conclusion
+      [Synthesized summary of the core contributions of the paper]
+      
+      ## 9. Future Scope
+      [Avenues for further scholarly study, extensions, or applications]
+      
+      ## References
+      [A list of realistic academic citations]
+
+      Separate each of the 4 pages explicitly with the exact line: "--- PAGE BREAK ---". Do not add any other page dividers.`;
 
       const response = await ai.models.generateContent({
         model: 'gemini-3.5-flash',
@@ -430,26 +490,51 @@ app.post('/api/papers', async (req: Request, res: Response) => {
     } catch (err: any) {
       console.error('Gemini synthesis failed, using hardcoded placeholder', err.message);
       extractedText = `
-      # ${title}
-      Authors: ${authors || 'Unknown'}
-      Published in: ${journal || 'Self-published'} (${year || 2026})
-      
-      Abstract: This paper presents an exploration into ${title}. We define its methodology, evaluation, and experimental paradigms.
-      
-      --- PAGE BREAK ---
-      
-      # Methodology
-      The underlying architectural pipeline utilizes advanced neural configurations for semantic representation and feature parsing.
-      
-      --- PAGE BREAK ---
-      
-      # Experiments & Results
-      We evaluate the model on state-of-the-art benchmarks and achieve high operational performance.
-      
-      --- PAGE BREAK ---
-      
-      # Related Work & Conclusion
-      We compare our model to prior baselines and propose active paths for further research and application.
+# ${title}
+Authors: ${authors || 'Unknown'}
+Published in: ${journal || 'Self-published'} (${year || 2026})
+
+## Abstract
+This paper presents a comprehensive study and exploration into "${title}". We address the core research challenges of scaling these workflows effectively under realistic environment constraints.
+
+## 1. Introduction
+The rapid expansion of standard computational systems has introduced several bottlenecks in processing efficiency and operational latency. This paper presents an extensive analysis of "${title}" to address these performance degradations.
+
+## 2. Problem Statement
+Existing standard methodologies suffer from limited scalability and high computational overhead. There is a lack of robust frameworks capable of maintaining high-fidelity output under constrained processing parameters.
+
+--- PAGE BREAK ---
+
+## 3. Methodology
+Our proposed approach integrates a multi-stage pipeline designed specifically for "${title}". We utilize adaptive normalization layers, synchronized feature arrays, and optimized operational pathways to streamline computation.
+
+## 4. Model Architecture
+The underlying model consists of a deep-stacked transformer-like encoder-decoder pipeline with specialized attention gates. This allows the system to focus on high-priority indices while discarding redundant calculations.
+
+## 5. Dataset
+We evaluate our approach using a balanced combination of synthetic benchmarks and real-world industrial datasets, comprising over 10 million token instances and diverse sample conditions.
+
+--- PAGE BREAK ---
+
+## 6. Experimental Results
+Under baseline testing configurations, our method demonstrates significant improvements over existing standard approaches. We observe a 25% increase in computational throughput and a 40% reduction in training latency.
+
+## 7. Key Findings
+- **High-Fidelity Scaling**: The system scales linearly with token size.
+- **Robust Generalization**: The model maintains high accuracy even under significant sample perturbations.
+- **Resource Optimization**: CPU/GPU utilization is lowered by 15% during peak loads.
+
+--- PAGE BREAK ---
+
+## 8. Conclusion
+In this paper, we introduced an optimized framework for "${title}". Our results prove that the integration of specialized attention layers and optimized datasets drastically improves both speed and quality.
+
+## 9. Future Scope
+Future investigations will explore the applicability of this system to multi-modal environments and evaluate its scaling behavior on decentralized edge computing setups.
+
+## References
+1. Vaswani, A. et al. (2017). "Attention Is All You Need." NeurIPS.
+2. Devlin, J. et5 al. (2019). "BERT: Pre-training of Deep Bidirectional Transformers." NAACL.
       `;
     }
   }
@@ -952,16 +1037,16 @@ app.post('/api/reviews', async (req: Request, res: Response) => {
     KEY WORDS/TEXT: ${p.content.substring(0, 4000)}
     `).join('\n\n');
 
-    const prompt = `You are a professional research synthesist and senior reviewer. Compare the provided research papers and produce a comprehensive literature review.
+    const prompt = `You are a professional research synthesist and senior reviewer. Compare the provided research papers and produce a comprehensive literature review comparing them across exactly these 7 dimensions.
     Return ONLY a JSON object matching this schema:
     {
       "title": "A review title here",
       "synthesisTable": [
         {
-          "heading": "Title",
+          "heading": "Paper Title & Authors",
           "values": {
-            "paper_id_1": "Title of paper 1",
-            "paper_id_2": "Title of paper 2"
+            "paper_id_1": "Title and authors of paper 1",
+            "paper_id_2": "Title and authors of paper 2"
           }
         }
       ],
@@ -969,17 +1054,14 @@ app.post('/api/reviews', async (req: Request, res: Response) => {
       "gapAnalysis": "A deep analysis of current limits, unresolved contradictions, and research gaps in these topics (approx 150 words)."
     }
     
-    You MUST include EXACTLY the following 10 headings in the synthesisTable array, and for each heading, provide comparative values for ALL provided papers:
-    1. Title
-    2. Authors
-    3. Year
-    4. Methodology
-    5. Dataset
-    6. Model
-    7. Results
-    8. Strengths
-    9. Limitations
-    10. Research Gap
+    You MUST include EXACTLY the following 7 headings in the synthesisTable array, and for each heading, provide comparative values for ALL provided papers:
+    1. Paper Title & Authors
+    2. Research Objective / Main Goal
+    3. Scholarly Methodology / Core Approach
+    4. Dataset / Context
+    5. Key Findings / Results
+    6. Limitations / Weaknesses
+    7. Future Work
     
     Selected Papers details:
     ${papersMeta}`;
@@ -1013,7 +1095,23 @@ app.post('/api/reviews', async (req: Request, res: Response) => {
       }
     });
 
-    const parsed = JSON.parse(response.text || '{}');
+    let parsed: any;
+    try {
+      const cleanText = response.text?.replace(/```json\s*/i, '').replace(/```\s*$/, '').trim() || '{}';
+      parsed = JSON.parse(cleanText);
+    } catch (parseErr) {
+      console.warn("Direct JSON parsing failed, trying regex extraction", parseErr);
+      const match = response.text?.match(/\{[\s\S]*\}/);
+      if (match) {
+        try {
+          parsed = JSON.parse(match[0]);
+        } catch (e) {
+          throw new Error("Could not parse Gemini JSON response");
+        }
+      } else {
+        throw new Error("No JSON object found in Gemini response");
+      }
+    }
     
     const review: LiteratureReview = {
       id: `lr-${Date.now()}`,
@@ -1039,83 +1137,56 @@ app.post('/api/reviews', async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error('Gemini Literature Review synthesis failed, generating local fallback review', err.message);
     
-    // Beautiful local static synthesis builder with exactly the 10 requested dimensions
+    // Dynamic fallback matching the 7 requested dimensions exactly
     const synthesisTable = [
       {
-        heading: 'Title',
+        heading: 'Paper Title & Authors',
         values: papers.reduce((acc, p) => {
-          acc[p.id] = p.title;
+          acc[p.id] = `"${p.title}" by ${p.authors}`;
           return acc;
         }, {} as Record<string, string>)
       },
       {
-        heading: 'Authors',
+        heading: 'Research Objective / Main Goal',
         values: papers.reduce((acc, p) => {
-          acc[p.id] = p.authors;
+          acc[p.id] = p.summary?.coreProblem || `To investigate, design, and optimize robust models and paradigms for "${p.title}" to improve computational efficiency under real-time constraints.`;
           return acc;
         }, {} as Record<string, string>)
       },
       {
-        heading: 'Year',
+        heading: 'Scholarly Methodology / Core Approach',
         values: papers.reduce((acc, p) => {
-          acc[p.id] = String(p.year);
+          acc[p.id] = p.summary?.methodology || 'Quantitative experimental research utilizing neural baseline architectures, optimized layer pipelines, and custom parameterization.';
           return acc;
         }, {} as Record<string, string>)
       },
       {
-        heading: 'Methodology',
-        values: papers.reduce((acc, p) => {
-          acc[p.id] = p.abstract.includes('method') || p.abstract.includes('approach')
-            ? 'Empirical study employing a ' + p.abstract.substring(p.abstract.toLowerCase().indexOf('method'), p.abstract.toLowerCase().indexOf('method') + 120) + '...'
-            : 'Quantitative experimental research utilizing neural baseline architectures and custom parameterization.';
-          return acc;
-        }, {} as Record<string, string>)
-      },
-      {
-        heading: 'Dataset',
+        heading: 'Dataset / Context',
         values: papers.reduce((acc, p) => {
           acc[p.id] = p.abstract.includes('dataset') || p.abstract.includes('data')
-            ? 'Verified on ' + p.abstract.substring(p.abstract.toLowerCase().indexOf('data'), p.abstract.toLowerCase().indexOf('data') + 100) + '...'
-            : 'Standard public benchmark corpora paired with custom validation subsets.';
+            ? 'Evaluated on ' + p.abstract.substring(p.abstract.toLowerCase().indexOf('data'), p.abstract.toLowerCase().indexOf('data') + 120) + '...'
+            : 'Standard public benchmark corpora paired with custom validation subsets for task alignment.';
           return acc;
         }, {} as Record<string, string>)
       },
       {
-        heading: 'Model',
+        heading: 'Key Findings / Results',
         values: papers.reduce((acc, p) => {
-          acc[p.id] = p.title.toLowerCase().includes('llm') || p.abstract.toLowerCase().includes('model') || p.abstract.toLowerCase().includes('network')
-            ? 'Deep transformer language model optimized via stochastic gradient descent.'
-            : 'Algorithmic regression and representation parsing engine.';
+          acc[p.id] = p.summary?.findings || 'Demonstrated substantial operational speed-ups and score improvements over state-of-the-art baselines, with high training stability.';
           return acc;
         }, {} as Record<string, string>)
       },
       {
-        heading: 'Results',
+        heading: 'Limitations / Weaknesses',
         values: papers.reduce((acc, p) => {
-          acc[p.id] = p.abstract.length > 150 
-            ? p.abstract.substring(p.abstract.length - 150)
-            : 'Demonstrated exceptional performance optimization over standard state-of-the-art baselines.';
+          acc[p.id] = p.summary?.limitations || 'Significant resource allocation required for initial training phases; sensitive to high hyper-parameter variation and domain drift.';
           return acc;
         }, {} as Record<string, string>)
       },
       {
-        heading: 'Strengths',
+        heading: 'Future Work',
         values: papers.reduce((acc, p) => {
-          acc[p.id] = 'Exceptional processing velocity, high sample efficiency, and scalable inference bounds.';
-          return acc;
-        }, {} as Record<string, string>)
-      },
-      {
-        heading: 'Limitations',
-        values: papers.reduce((acc, p) => {
-          acc[p.id] = 'Significant resource allocation required for initial training phases; sensitive to hyper-parameter variation.';
-          return acc;
-        }, {} as Record<string, string>)
-      },
-      {
-        heading: 'Research Gap',
-        values: papers.reduce((acc, p) => {
-          acc[p.id] = 'Does not currently address domain adaptation challenges under high distributional drift scenarios.';
+          acc[p.id] = p.insights?.futureScope?.[0] || 'Investigating lighter weight models for edge execution and exploring applicability of these layers to multi-modal video and speech systems.';
           return acc;
         }, {} as Record<string, string>)
       }
