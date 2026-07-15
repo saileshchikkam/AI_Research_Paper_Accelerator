@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Sparkles, Layers, CheckCircle2, ChevronRight, Table, BookOpen,
-  Trash2, RefreshCw, Plus, AlertCircle, FileText, FileSpreadsheet
+  Trash2, RefreshCw, Plus, AlertCircle, FileText, FileSpreadsheet, ArrowLeft
 } from 'lucide-react';
 import { Paper, LiteratureReview, User } from '../types';
 
 interface LiteratureReviewProps {
   user: User;
+  onBackToLibrary: () => void;
 }
 
-export default function LiteratureReviewPage({ user }: LiteratureReviewProps) {
+export default function LiteratureReviewPage({ user, onBackToLibrary }: LiteratureReviewProps) {
   const [papers, setPapers] = useState<Paper[]>([]);
   const [reviews, setReviews] = useState<LiteratureReview[]>([]);
   const [selectedReview, setSelectedReview] = useState<LiteratureReview | null>(null);
@@ -21,7 +22,13 @@ export default function LiteratureReviewPage({ user }: LiteratureReviewProps) {
   const [error, setError] = useState('');
   const [creationSuccessAlert, setCreationSuccessAlert] = useState(false);
 
+  // Initial loading states
+  const [initLoading, setInitLoading] = useState(true);
+  const [initFailed, setInitFailed] = useState(false);
+
   const fetchReviewsAndPapers = async () => {
+    setInitLoading(true);
+    setInitFailed(false);
     try {
       const [papRes, revRes] = await Promise.all([
         fetch('/api/papers'),
@@ -37,9 +44,15 @@ export default function LiteratureReviewPage({ user }: LiteratureReviewProps) {
         if (revList.length > 0 && !selectedReview) {
           setSelectedReview(revList[0]);
         }
+      } else {
+        setInitFailed(true);
+        console.error('Backend returned bad status', papRes.status, revRes.status);
       }
     } catch (err) {
+      setInitFailed(true);
       console.error('Error fetching review data', err);
+    } finally {
+      setInitLoading(false);
     }
   };
 
@@ -117,8 +130,64 @@ export default function LiteratureReviewPage({ user }: LiteratureReviewProps) {
     }
   };
 
+  if (initLoading) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto space-y-6" id="synthesis_skeleton">
+        {/* Skeleton UI during initialization */}
+        <div className="bg-slate-900 h-40 rounded-3xl animate-pulse" />
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="lg:col-span-5 h-96 bg-white border border-slate-200 rounded-3xl animate-pulse" />
+          <div className="lg:col-span-7 h-96 bg-white border border-slate-200 rounded-3xl animate-pulse" />
+        </div>
+      </div>
+    );
+  }
+
+  if (initFailed) {
+    return (
+      <div className="p-6 max-w-xl mx-auto flex flex-col items-center justify-center text-center h-[70vh] space-y-6" id="synthesis_error_state">
+        <div className="p-4 bg-red-50 text-red-600 rounded-full">
+          <AlertCircle className="w-12 h-12" />
+        </div>
+        <div className="space-y-2">
+          <h3 className="font-display font-black text-xl text-slate-900">Unable to load Synthesis Studio</h3>
+          <p className="text-sm text-slate-500">
+            We encountered a connection issue while communicating with the backend synthesis database or engine. Please verify your connection and try again.
+          </p>
+        </div>
+        <div className="flex gap-4">
+          <button
+            onClick={fetchReviewsAndPapers}
+            className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-5 py-2.5 rounded-xl text-xs flex items-center gap-2 shadow-md transition-all shrink-0"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Retry Connection
+          </button>
+          <button
+            onClick={onBackToLibrary}
+            className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-5 py-2.5 rounded-xl text-xs flex items-center gap-2 shadow-sm transition-all shrink-0"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back to Library
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="p-8 space-y-8 max-w-7xl mx-auto" id="synthesis_studio_root">
+    <div className="p-6 space-y-6 max-w-7xl mx-auto animate-fade-in" id="synthesis_studio_root">
+      {/* BREADCRUMB / BACK NAVIGATION */}
+      <div className="flex items-center justify-between mb-2">
+        <button
+          onClick={onBackToLibrary}
+          className="text-slate-500 hover:text-slate-900 text-xs font-bold flex items-center gap-1.5 transition-colors"
+          id="back_to_library_btn"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back to Research Library
+        </button>
+      </div>
       
       {/* SYNTHESIS STUDIO WORKSPACE HEADER PANEL */}
       <div className="bg-slate-900 text-white rounded-3xl p-6 shadow-xl flex flex-col md:flex-row items-stretch gap-6" id="synthesis_jumbotron">

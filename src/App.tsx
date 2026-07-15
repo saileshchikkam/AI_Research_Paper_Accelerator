@@ -8,6 +8,7 @@ import PaperViewer from './components/PaperViewer';
 import Analytics from './components/Analytics';
 import SettingsPage from './components/Settings';
 import Profile from './components/Profile';
+import LiteratureReviewPage from './components/LiteratureReview';
 import { User } from './types';
 
 export default function App() {
@@ -89,6 +90,13 @@ export default function App() {
               onOpenPaper={handleOpenPaper} 
               onNavigateToTab={handleNavigateToTab}
               onStartComparativeChat={handleStartComparativeChat}
+            />
+          )}
+
+          {activeTab === 'synthesis' && (
+            <LiteratureReviewPage
+              user={user}
+              onBackToLibrary={() => handleNavigateToTab('library')}
             />
           )}
 

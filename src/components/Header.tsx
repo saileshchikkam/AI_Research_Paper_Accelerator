@@ -63,6 +63,7 @@ export default function Header({ activeTab, user }: HeaderProps) {
       case 'analytics': return 'Analytics';
       case 'profile': return 'Scholar Profile';
       case 'settings': return 'Settings';
+      case 'synthesis': return 'Literature Synthesis Matrix Studio';
       default: return 'ResearchMind AI';
     }
   };
@@ -75,6 +76,7 @@ export default function Header({ activeTab, user }: HeaderProps) {
       case 'analytics': return 'Track reading rates, study hours, and assessment results.';
       case 'profile': return 'Your academic achievements, milestones, and stats.';
       case 'settings': return 'Manage system themes, notification triggers, and model personas.';
+      case 'synthesis': return 'Select publications to generate comparison grids, narratives, and gap analyses.';
       default: return 'AI Research Paper Accelerator';
     }
   };
