@@ -94,9 +94,9 @@ export default function Header({ activeTab, user, onToggleSidebar }: HeaderProps
   };
 
   return (
-    <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 md:px-6 py-3 flex flex-col md:flex-row md:items-center justify-between gap-3 sticky top-0 z-40" id="top_header_root">
+    <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 md:px-6 py-3 flex items-center justify-between gap-3 sticky top-0 z-40" id="top_header_root">
       {/* Title & Greeting */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 min-w-0">
         {onToggleSidebar && (
           <button
             onClick={onToggleSidebar}
@@ -108,67 +108,53 @@ export default function Header({ activeTab, user, onToggleSidebar }: HeaderProps
           </button>
         )}
         <div className="flex flex-col justify-center min-w-0">
-          <h2 className="font-display font-extrabold text-lg md:text-xl text-slate-950 dark:text-white tracking-tight leading-tight truncate">{getPageTitle()}</h2>
+          <h2 className="font-display font-extrabold text-base sm:text-lg md:text-xl text-slate-950 dark:text-white tracking-tight leading-tight truncate">{getPageTitle()}</h2>
           {activeTab === 'dashboard' ? (
-            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5 flex items-center gap-1.5 truncate" id="user_greeting_header">
+            <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5 flex items-center gap-1.5 truncate" id="user_greeting_header">
               {getGreeting()}
             </p>
           ) : (
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-normal font-medium truncate">{getPageSubtitle()}</p>
+            <p className="text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-normal font-medium truncate">{getPageSubtitle()}</p>
           )}
         </div>
       </div>
 
       {/* Quick Metrics & Badges / Dashboard header content */}
       {activeTab === 'dashboard' ? (
-        <div className="flex flex-wrap items-center gap-3 md:gap-4 text-xs" id="dashboard_header_info">
-          {/* Quick Search */}
-          <div className="relative" id="quick_search_container">
-            <input 
-              type="text" 
-              placeholder="Search documents..."
-              className="pl-8 pr-3 py-1 w-36 focus:w-48 transition-all duration-300 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:border-blue-500 focus:bg-white dark:focus:bg-slate-900 focus:outline-none rounded-full text-[11px] font-medium text-slate-700 dark:text-slate-200"
-              id="quick_search_input"
-            />
-            <Search className="absolute left-2.5 top-1.5 w-3 h-3 text-slate-400" />
+        <div className="flex items-center gap-2 sm:gap-3 md:gap-4 shrink-0" id="dashboard_header_info">
+          {/* AI Status Indicator */}
+          <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800/60 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl border border-slate-100 dark:border-slate-800 shrink-0" id="header_ai_status">
+            {apiKeyOk === true ? (
+              <>
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
+                <span className="text-[10px] sm:text-xs font-semibold text-emerald-600 dark:text-emerald-400 font-sans">AI Online</span>
+              </>
+            ) : apiKeyOk === null ? (
+              <>
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0"></span>
+                <span className="text-[10px] sm:text-xs font-semibold text-amber-600 dark:text-amber-400 font-sans">Processing</span>
+              </>
+            ) : (
+              <>
+                <span className="w-2 h-2 rounded-full bg-red-500 shrink-0"></span>
+                <span className="text-[10px] sm:text-xs font-semibold text-red-600 dark:text-red-400 font-sans">AI Offline</span>
+              </>
+            )}
           </div>
 
-          {/* Info Columns */}
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-left md:border-l md:border-slate-200 dark:md:border-slate-800 md:pl-4" id="dashboard_info_columns">
-            <div>
-              <span className="block text-[8px] font-bold text-slate-400 uppercase tracking-wider leading-none">Last Login</span>
-              <span className="text-[10px] font-semibold text-slate-600 dark:text-slate-300 font-mono mt-0.5 block">{lastLogin}</span>
-            </div>
-            <div>
-              <span className="block text-[8px] font-bold text-slate-400 uppercase tracking-wider leading-none">Workspace</span>
-              <span className="text-[10px] font-semibold text-slate-600 dark:text-slate-300 mt-0.5 block">ResearchMind</span>
-            </div>
-            <div>
-              <span className="block text-[8px] font-bold text-slate-400 uppercase tracking-wider leading-none">AI Status</span>
-              <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 mt-0.5">
-                <span className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse"></span>
-                Connected
-              </span>
-            </div>
-            <div>
-              <span className="block text-[8px] font-bold text-slate-400 uppercase tracking-wider leading-none">Documents</span>
-              <span className="text-[10px] font-mono font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 px-1.5 py-0.5 rounded mt-0.5 block text-center leading-none">{paperCount}</span>
-            </div>
-          </div>
-
-          {/* Time & Notifications */}
-          <div className="flex items-center gap-3 border-l border-slate-200 dark:border-slate-800 pl-3">
-            <div className="text-left hidden lg:block">
-              <span className="block text-[8px] font-bold text-slate-400 uppercase tracking-wider leading-none">Local Time</span>
-              <span className="text-[10px] font-mono font-medium text-slate-500 dark:text-slate-400 mt-0.5 block whitespace-nowrap">{currentTime}</span>
-            </div>
-            <button className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-blue-400 dark:hover:bg-slate-800 rounded-full transition-all relative shrink-0" id="bell_btn" title="Notifications">
+          {/* Action Icons */}
+          <div className="flex items-center gap-1 sm:gap-2 pl-2 border-l border-slate-200 dark:border-slate-800 shrink-0">
+            <button 
+              className="p-1.5 sm:p-2 text-slate-500 hover:text-blue-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-blue-400 dark:hover:bg-slate-800 rounded-xl transition-all relative shrink-0 cursor-pointer" 
+              id="bell_btn" 
+              title="Notifications"
+            >
               <Bell className="w-4 h-4" />
-              <span className="absolute top-1 right-1 w-1 h-1 bg-blue-600 rounded-full"></span>
+              <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-blue-600 rounded-full"></span>
             </button>
             <button 
               onClick={toggleTheme}
-              className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-amber-400 dark:hover:bg-slate-800 rounded-full transition-all shrink-0 cursor-pointer" 
+              className="p-1.5 sm:p-2 text-slate-500 hover:text-blue-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-amber-400 dark:hover:bg-slate-800 rounded-xl transition-all shrink-0 cursor-pointer" 
               id="theme_toggle_dashboard" 
               title={theme === 'light' ? "Switch to Dark Mode" : "Switch to Light Mode"}
             >
