@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, Flame, KeyRound, Sparkles, AlertTriangle } from 'lucide-react';
+import { Bell, Flame, Sparkles, Search } from 'lucide-react';
 import { User } from '../types';
 
 interface HeaderProps {
@@ -9,18 +9,50 @@ interface HeaderProps {
 
 export default function Header({ activeTab, user }: HeaderProps) {
   const [apiKeyOk, setApiKeyOk] = useState<boolean | null>(null);
-  const [streakCount, setStreakCount] = useState(5);
+  const [streakCount] = useState(5);
+  const [paperCount, setPaperCount] = useState<number>(0);
+  const [currentTime, setCurrentTime] = useState<string>('');
+  const [lastLogin, setLastLogin] = useState<string>('');
 
   useEffect(() => {
-    // Quick, non-blocking check on mount to see if the server has a valid Gemini Key configured
-    fetch('/api/papers') // Simple quick endpoint
-      .then(() => {
-        // We will assume true unless an error is caught elsewhere, or we can probe the status elegantly
+    // Sync paper count and API status
+    fetch('/api/papers')
+      .then((res) => {
+        if (res.ok) return res.json();
+        throw new Error();
+      })
+      .then((data) => {
         setApiKeyOk(true);
+        if (Array.isArray(data)) {
+          setPaperCount(data.length);
+        }
       })
       .catch(() => {
         setApiKeyOk(false);
       });
+  }, [activeTab]);
+
+  useEffect(() => {
+    // Setup last login timestamp
+    let saved = localStorage.getItem('researchmind_last_login');
+    if (!saved) {
+      saved = '15 July 2026 • 10:15 AM';
+      localStorage.setItem('researchmind_last_login', saved);
+    }
+    setLastLogin(saved);
+
+    // Setup running clock
+    const updateTime = () => {
+      const now = new Date();
+      const day = now.getDate();
+      const month = now.toLocaleString('en-US', { month: 'long' });
+      const year = now.getFullYear();
+      const time = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+      setCurrentTime(`${day} ${month} ${year} • ${time}`);
+    };
+    updateTime();
+    const interval = setInterval(updateTime, 1000);
+    return () => clearInterval(interval);
   }, []);
 
   const getPageTitle = () => {
@@ -47,48 +79,113 @@ export default function Header({ activeTab, user }: HeaderProps) {
     }
   };
 
+  const getGreeting = () => {
+    const hours = new Date().getHours();
+    let timeGreeting = 'Welcome';
+    if (hours < 12) timeGreeting = 'Good Morning';
+    else if (hours < 18) timeGreeting = 'Good Afternoon';
+    else timeGreeting = 'Good Evening';
+    return `${timeGreeting}, ${user.name || 'Scholar'} 👋`;
+  };
+
   return (
-    <header className="bg-white border-b border-slate-200 px-8 py-5 flex items-center justify-between sticky top-0 z-40" id="top_header_root">
-      {/* Title */}
+    <header className="bg-white border-b border-slate-200 px-8 py-5 flex flex-col md:flex-row md:items-center justify-between gap-4 sticky top-0 z-40" id="top_header_root">
+      {/* Title & Greeting */}
       <div>
         <h2 className="font-display font-extrabold text-2xl text-slate-950 tracking-tight">{getPageTitle()}</h2>
-        <p className="text-xs text-slate-500 mt-1 leading-normal font-medium">{getPageSubtitle()}</p>
+        {activeTab === 'dashboard' ? (
+          <p className="text-sm text-slate-600 font-semibold mt-1 flex items-center gap-1.5" id="user_greeting_header">
+            {getGreeting()}
+          </p>
+        ) : (
+          <p className="text-xs text-slate-500 mt-1 leading-normal font-medium">{getPageSubtitle()}</p>
+        )}
       </div>
 
-      {/* Quick Metrics & Badges */}
-      <div className="flex items-center gap-4" id="header_widgets">
-        {/* Study Streak */}
-        <div 
-          className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-orange-50 text-orange-700 border border-orange-100 hover:scale-105 transition-transform cursor-default"
-          title="Daily Study Streak Counter"
-          id="streak_widget"
-        >
-          <Flame className="w-4 h-4 text-orange-500 fill-orange-500 animate-bounce" />
-          <div className="text-left leading-none">
-            <span className="text-xs font-black block">{streakCount} Days</span>
-            <span className="text-[9px] text-orange-500 font-mono uppercase tracking-wider font-semibold">Streak</span>
+      {/* Quick Metrics & Badges / Dashboard header content */}
+      {activeTab === 'dashboard' ? (
+        <div className="flex flex-wrap items-center gap-4 md:gap-6" id="dashboard_header_info">
+          {/* Quick Search */}
+          <div className="relative" id="quick_search_container">
+            <input 
+              type="text" 
+              placeholder="Search documents..."
+              className="pl-9 pr-4 py-1.5 w-40 focus:w-56 transition-all duration-300 bg-slate-50 border border-slate-200 focus:border-blue-500 focus:bg-white focus:outline-none rounded-full text-xs font-medium text-slate-700"
+              id="quick_search_input"
+            />
+            <Search className="absolute left-3 top-2 w-3.5 h-3.5 text-slate-400" />
+          </div>
+
+          {/* Info Columns */}
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-left md:border-l md:border-slate-200 md:pl-5" id="dashboard_info_columns">
+            <div>
+              <span className="block text-[8px] font-bold text-slate-400 uppercase tracking-wider leading-none">Last Login</span>
+              <span className="text-[11px] font-semibold text-slate-700 font-mono mt-0.5 block">{lastLogin}</span>
+            </div>
+            <div>
+              <span className="block text-[8px] font-bold text-slate-400 uppercase tracking-wider leading-none">Workspace</span>
+              <span className="text-[11px] font-semibold text-slate-700 mt-0.5 block">ResearchMind Workspace</span>
+            </div>
+            <div>
+              <span className="block text-[8px] font-bold text-slate-400 uppercase tracking-wider leading-none">AI Status</span>
+              <span className="text-[11px] font-semibold text-emerald-600 flex items-center gap-1 mt-0.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                Gemini Connected
+              </span>
+            </div>
+            <div>
+              <span className="block text-[8px] font-bold text-slate-400 uppercase tracking-wider leading-none">Documents Indexed</span>
+              <span className="text-[11px] font-mono font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded mt-0.5 block text-center">{paperCount}</span>
+            </div>
+          </div>
+
+          {/* Time & Notifications */}
+          <div className="flex items-center gap-4 border-l border-slate-200 pl-4">
+            <div className="text-left hidden lg:block">
+              <span className="block text-[8px] font-bold text-slate-400 uppercase tracking-wider leading-none">Local Time</span>
+              <span className="text-[11px] font-mono font-medium text-slate-500 mt-0.5 block whitespace-nowrap">{currentTime}</span>
+            </div>
+            <button className="p-2 text-slate-500 hover:text-blue-600 hover:bg-slate-100 rounded-full transition-all relative shrink-0" id="bell_btn" title="Notifications">
+              <Bell className="w-4.5 h-4.5" />
+              <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-blue-600 rounded-full"></span>
+            </button>
           </div>
         </div>
+      ) : (
+        <div className="flex items-center gap-4" id="header_widgets">
+          {/* Study Streak */}
+          <div 
+            className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-orange-50 text-orange-700 border border-orange-100 hover:scale-105 transition-transform cursor-default"
+            title="Daily Study Streak Counter"
+            id="streak_widget"
+          >
+            <Flame className="w-4 h-4 text-orange-500 fill-orange-500 animate-bounce" />
+            <div className="text-left leading-none">
+              <span className="text-xs font-black block">{streakCount} Days</span>
+              <span className="text-[9px] text-orange-500 font-mono uppercase tracking-wider font-semibold">Streak</span>
+            </div>
+          </div>
 
-        {/* Gemini Status Widget */}
-        <div 
-          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl border transition-all text-xs font-semibold ${
-            apiKeyOk 
-              ? 'bg-blue-50 text-blue-700 border-blue-100' 
-              : 'bg-amber-50 text-amber-700 border-amber-100'
-          }`}
-          id="gemini_status_widget"
-        >
-          <Sparkles className="w-3.5 h-3.5 text-blue-500 animate-pulse" />
-          <span className="font-sans">Gemini 2.5 Active</span>
-        </div>
+          {/* Gemini Status Widget */}
+          <div 
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl border transition-all text-xs font-semibold ${
+              apiKeyOk 
+                ? 'bg-blue-50 text-blue-700 border-blue-100' 
+                : 'bg-amber-50 text-amber-700 border-amber-100'
+            }`}
+            id="gemini_status_widget"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-blue-500 animate-pulse" />
+            <span className="font-sans">Gemini 2.5 Active</span>
+          </div>
 
-        {/* User Role Badge */}
-        <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-medium text-slate-600">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-          <span className="capitalize">{user.role} workspace</span>
+          {/* User Role Badge */}
+          <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-medium text-slate-600">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+            <span className="capitalize">{user.role} workspace</span>
+          </div>
         </div>
-      </div>
+      )}
     </header>
   );
 }

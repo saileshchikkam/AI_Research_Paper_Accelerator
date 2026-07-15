@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { 
   FileText, FolderHeart, Calendar, FileUp, Sparkles, Plus, 
-  ArrowRight, BookOpen, Clock, CheckCircle2, TrendingUp, AlertCircle 
+  ArrowRight, BookOpen, Clock, CheckCircle2, TrendingUp, AlertCircle,
+  Timer, Activity, ArrowUpRight
 } from 'lucide-react';
-import { DashboardMetrics, Folder, Paper, User } from '../types';
+import { DashboardMetrics, Folder, Paper, User, StudyActivity } from '../types';
 
 interface DashboardProps {
   user: User;
@@ -11,13 +12,33 @@ interface DashboardProps {
   onNavigateToTab: (tab: string) => void;
 }
 
+function formatRelativeTime(dateInput: string | Date | undefined): string {
+  if (!dateInput) return 'Recently';
+  const date = new Date(dateInput);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 30) return `${diffDays}d ago`;
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
 export default function Dashboard({ user, onOpenPaper, onNavigateToTab }: DashboardProps) {
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [folders, setFolders] = useState<Folder[]>([]);
   const [papers, setPapers] = useState<Paper[]>([]);
+  const [activities, setActivities] = useState<StudyActivity[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   
   // Upload States
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadStep, setUploadStep] = useState(0);
   const [dragActive, setDragActive] = useState(false);
   const [uploadTitle, setUploadTitle] = useState('');
   const [uploadAuthors, setUploadAuthors] = useState('');
@@ -28,26 +49,53 @@ export default function Dashboard({ user, onOpenPaper, onNavigateToTab }: Dashbo
   const [uploadError, setUploadError] = useState('');
   const [uploadSuccess, setUploadSuccess] = useState('');
 
+  // Interactive Chart States
+  const [hoveredBar, setHoveredBar] = useState<number | null>(null);
+  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
+
+  const uploadSteps = [
+    "Uploading PDF binary payload...",
+    "Extracting schema & citations...",
+    "Invoking Gemini semantic model...",
+    "Generating study materials & quizzes...",
+    "Storing academic text vectors..."
+  ];
+
   const fetchDashboardData = async () => {
     try {
-      const [metRes, folRes, papRes] = await Promise.all([
+      const [metRes, folRes, papRes, actRes] = await Promise.all([
         fetch('/api/metrics'),
         fetch('/api/folders'),
-        fetch('/api/papers')
+        fetch('/api/papers'),
+        fetch('/api/activities')
       ]);
-      if (metRes.ok && folRes.ok && papRes.ok) {
+      if (metRes.ok && folRes.ok && papRes.ok && actRes.ok) {
         setMetrics(await metRes.json());
         setFolders(await folRes.json());
         setPapers(await papRes.json());
+        setActivities(await actRes.json());
       }
     } catch (err) {
       console.error('Failed to retrieve dashboard metrics.', err);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   useEffect(() => {
     fetchDashboardData();
   }, []);
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (isUploading) {
+      setUploadStep(0);
+      const interval = setInterval(() => {
+        setUploadStep(prev => (prev < uploadSteps.length - 1 ? prev + 1 : prev));
+      }, 1500);
+      return () => clearInterval(interval);
+    }
+  }, [isUploading]);
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -130,8 +178,102 @@ export default function Dashboard({ user, onOpenPaper, onNavigateToTab }: Dashbo
     }
   };
 
-  // SVG bar chart parameters
+  // ----------------------------------------------------
+  // DYNAMIC CALCULATIONS FOR CURRENT LOGGED IN USER
+  // ----------------------------------------------------
+  
+  // Folders created by current user
+  const userFolders = folders.filter(f => !f.userId || f.userId === user.id);
+  const libraryFoldersCount = isLoading ? "--" : userFolders.length;
+
+  // Documents uploaded (all available inside workspace / or mapped folders)
+  const totalDocumentsCount = isLoading ? "--" : papers.length;
+
+  // Study log activities for current user
+  const userActivities = activities.filter(a => a.userId === user.id);
+  
+  // Quizzes completed count
+  const quizzesTakenCount = isLoading 
+    ? "--" 
+    : userActivities.filter(a => a.type === 'quiz').length;
+
+  // Study hours calculated from actual activities
+  const totalStudyMinutes = userActivities.reduce((acc, act) => {
+    if (act.type === 'read') return acc + 25;
+    if (act.type === 'chat') return acc + 15;
+    if (act.type === 'quiz') return acc + 20;
+    if (act.type === 'flashcard') return acc + 10;
+    if (act.type === 'note') return acc + 15;
+    return acc;
+  }, 0);
+  const studyHoursVal = isLoading 
+    ? "--" 
+    : totalStudyMinutes > 0 
+      ? `${(Math.round((totalStudyMinutes / 60) * 10) / 10).toFixed(1)}h` 
+      : "0.0h";
+
+  // Chart configuration
   const maxWeeklyMinutes = metrics ? Math.max(...metrics.weeklyProgress.map(d => d.minutes), 60) : 60;
+
+  // Activity logs mapper
+  const getActivityDetails = (act: StudyActivity) => {
+    switch (act.type) {
+      case 'read':
+        return {
+          title: act.detail || "PDF Research Paper Ingested",
+          icon: <FileText className="w-4 h-4 text-blue-500" />,
+          bg: "bg-blue-50/70 border border-blue-100/50",
+          badge: "✓ Ingested"
+        };
+      case 'chat':
+        return {
+          title: act.detail || "AI Research Conversation",
+          icon: <Sparkles className="w-4 h-4 text-purple-500 animate-pulse" />,
+          bg: "bg-purple-50/70 border border-purple-100/50",
+          badge: "✓ Grounded"
+        };
+      case 'quiz':
+        return {
+          title: act.detail || "Academic Practice Quiz",
+          icon: <CheckCircle2 className="w-4 h-4 text-amber-500" />,
+          bg: "bg-amber-50/70 border border-amber-100/50",
+          badge: "✓ Scored"
+        };
+      case 'note':
+        return {
+          title: act.detail || "Document Annotation Created",
+          icon: <BookOpen className="w-4 h-4 text-emerald-500" />,
+          bg: "bg-emerald-50/70 border border-emerald-100/50",
+          badge: "✓ Persisted"
+        };
+      case 'flashcard':
+        return {
+          title: act.detail || "Recall Review Completed",
+          icon: <Timer className="w-4 h-4 text-indigo-500" />,
+          bg: "bg-indigo-50/70 border border-indigo-100/50",
+          badge: "✓ Reviewed"
+        };
+      default:
+        return {
+          title: act.detail || "Workspace Study Activity",
+          icon: <Activity className="w-4 h-4 text-slate-500" />,
+          bg: "bg-slate-50/70 border border-slate-100/50",
+          badge: "✓ Processed"
+        };
+    }
+  };
+
+  const handleBarMouseMove = (idx: number, e: React.MouseEvent) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const parentRect = e.currentTarget.parentElement?.parentElement?.getBoundingClientRect();
+    if (parentRect) {
+      setTooltipPos({
+        x: rect.left - parentRect.left + rect.width / 2,
+        y: rect.top - parentRect.top - 45
+      });
+    }
+    setHoveredBar(idx);
+  };
 
   return (
     <div className="p-8 space-y-8 max-w-7xl mx-auto" id="dashboard_root">
@@ -170,10 +312,8 @@ export default function Dashboard({ user, onOpenPaper, onNavigateToTab }: Dashbo
           </div>
           <div>
             <span className="text-xs text-slate-400 font-mono uppercase tracking-wider font-semibold">Total Documents</span>
-            <h4 className="text-2xl font-extrabold text-slate-900 mt-1">{metrics?.totalPapers || 0}</h4>
-            <p className="text-[10px] text-emerald-600 mt-1 font-semibold flex items-center gap-1">
-              <span>+100% cloud backup</span>
-            </p>
+            <h4 className="text-2xl font-extrabold text-slate-900 mt-1">{totalDocumentsCount}</h4>
+            <p className="text-[10px] text-slate-500 mt-1 font-medium">Verified uploaded files</p>
           </div>
         </div>
 
@@ -183,7 +323,7 @@ export default function Dashboard({ user, onOpenPaper, onNavigateToTab }: Dashbo
           </div>
           <div>
             <span className="text-xs text-slate-400 font-mono uppercase tracking-wider font-semibold">Library Folders</span>
-            <h4 className="text-2xl font-extrabold text-slate-900 mt-1">{metrics?.totalFolders || 0}</h4>
+            <h4 className="text-2xl font-extrabold text-slate-900 mt-1">{libraryFoldersCount}</h4>
             <p className="text-[10px] text-slate-500 mt-1 font-medium">Segmented categories</p>
           </div>
         </div>
@@ -194,8 +334,8 @@ export default function Dashboard({ user, onOpenPaper, onNavigateToTab }: Dashbo
           </div>
           <div>
             <span className="text-xs text-slate-400 font-mono uppercase tracking-wider font-semibold">Quizzes Taken</span>
-            <h4 className="text-2xl font-extrabold text-slate-900 mt-1">{metrics?.quizzesCompleted || 0}</h4>
-            <p className="text-[10px] text-emerald-600 mt-1 font-semibold">100% factual accuracy</p>
+            <h4 className="text-2xl font-extrabold text-slate-900 mt-1">{quizzesTakenCount}</h4>
+            <p className="text-[10px] text-slate-500 mt-1 font-medium">Assessment feedback logs</p>
           </div>
         </div>
 
@@ -205,130 +345,28 @@ export default function Dashboard({ user, onOpenPaper, onNavigateToTab }: Dashbo
           </div>
           <div>
             <span className="text-xs text-slate-400 font-mono uppercase tracking-wider font-semibold">Study Hours</span>
-            <h4 className="text-2xl font-extrabold text-slate-900 mt-1">{metrics?.readingHours || 0}h</h4>
-            <p className="text-[10px] text-slate-500 mt-1 font-medium">Logged efficiency rate</p>
+            <h4 className="text-2xl font-extrabold text-slate-900 mt-1">{studyHoursVal}</h4>
+            <p className="text-[10px] text-slate-500 mt-1 font-medium">Calculated active focus</p>
           </div>
         </div>
       </div>
 
-      {/* MID SECTION: CHART & INGESTION BOX */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8" id="dashboard_mid_grid">
-        {/* Left Column: Custom SVG Weekly Reading Chart (7 cols) */}
-        <div className="lg:col-span-7 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between text-left">
+      {/* MID SECTION: SAS INGESTION PORTAL (LEFT 50%) & STUDY LOG STREAM (RIGHT 50%) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8" id="dashboard_mid_grid">
+        {/* SAS Ingestion Portal */}
+        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm text-left flex flex-col justify-between" id="sas_ingestion_portal">
           <div>
             <div className="flex items-center justify-between">
               <h4 className="font-display font-black text-lg text-slate-900 flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-blue-600" />
-                Weekly Ingestion Metrics
+                <FileUp className="w-5 h-5 text-blue-600 animate-bounce" />
+                SaaS Ingestion Portal
               </h4>
-              <span className="text-[10px] bg-slate-100 text-slate-600 font-mono font-bold uppercase tracking-wider px-2 py-1 rounded">
-                Minutes Active
+              <span className="text-[9px] bg-blue-50 text-blue-600 font-mono font-bold uppercase tracking-wider px-2 py-1 rounded">
+                PDF Upload
               </span>
             </div>
-            <p className="text-xs text-slate-500 mt-1">Shows active reader focus sessions monitored inside document workspaces.</p>
-          </div>
-
-          {/* SVG Custom Graph */}
-          <div className="my-6 relative flex-1 min-h-[220px]" id="svg_chart_container">
-            {metrics ? (
-              <svg className="w-full h-full min-h-[220px]" viewBox="0 0 500 200" preserveAspectRatio="none">
-                {/* Horizontal gridlines */}
-                {[0, 0.25, 0.5, 0.75, 1].map((ratio, i) => {
-                  const y = 20 + ratio * 140;
-                  const labelVal = Math.round(maxWeeklyMinutes * (1 - ratio));
-                  return (
-                    <g key={i}>
-                      <line x1="35" y1={y} x2="490" y2={y} stroke="#F1F5F9" strokeWidth="1" />
-                      <text x="5" y={y + 4} fill="#94A3B8" className="text-[9px] font-mono" textAnchor="start">
-                        {labelVal}m
-                      </text>
-                    </g>
-                  );
-                })}
-
-                {/* Draw active vertical bars */}
-                {metrics.weeklyProgress.map((item, idx) => {
-                  const spacing = 450 / 7;
-                  const x = 50 + idx * spacing + (spacing - 30) / 2;
-                  const barHeight = (item.minutes / maxWeeklyMinutes) * 140;
-                  const y = 160 - barHeight;
-
-                  return (
-                    <g key={idx} className="group">
-                      {/* Interactive hover background overlay */}
-                      <rect 
-                        x={x - 4} 
-                        y="20" 
-                        width="38" 
-                        height="145" 
-                        fill="transparent" 
-                        className="hover:fill-slate-50/50 cursor-pointer transition-colors"
-                      />
-                      
-                      {/* Actual vertical colored bar */}
-                      <rect
-                        x={x}
-                        y={y}
-                        width="30"
-                        height={Math.max(barHeight, 4)}
-                        rx="6"
-                        fill={idx === 5 ? '#3B82F6' : '#94A3B8'} // Highlight weekend/highest
-                        className="transition-all duration-300 hover:fill-blue-500"
-                      />
-                      
-                      {/* Hover label */}
-                      <text
-                        x={x + 15}
-                        y={y - 8}
-                        fill="#3B82F6"
-                        className="text-[10px] font-mono font-bold text-center opacity-0 group-hover:opacity-100 transition-opacity"
-                        textAnchor="middle"
-                      >
-                        {item.minutes}m
-                      </text>
-
-                      {/* X Axis text label */}
-                      <text
-                        x={x + 15}
-                        y="180"
-                        fill="#64748B"
-                        className="text-[10px] font-semibold text-center"
-                        textAnchor="middle"
-                      >
-                        {item.day}
-                      </text>
-                    </g>
-                  );
-                })}
-              </svg>
-            ) : (
-              <div className="flex items-center justify-center h-full text-xs text-slate-400 font-mono">
-                Calculating metrics...
-              </div>
-            )}
-          </div>
-          
-          <div className="flex items-center justify-between text-xs border-t border-slate-100 pt-4" id="chart_summary">
-            <span className="text-slate-500">Avg Session Duration: <strong>42 mins/day</strong></span>
-            <button 
-              onClick={() => onNavigateToTab('analytics')}
-              className="text-blue-600 font-bold hover:underline flex items-center gap-1.5"
-            >
-              Analyze Study Patterns
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-
-        {/* Right Column: SaaS Document Ingest Dropzone Form (5 cols) */}
-        <div className="lg:col-span-5 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm text-left flex flex-col justify-between">
-          <div>
-            <h4 className="font-display font-black text-lg text-slate-900 flex items-center gap-2">
-              <FileUp className="w-5 h-5 text-blue-600" />
-              SaaS Ingestion Portal
-            </h4>
             <p className="text-xs text-slate-500 mt-1">
-              Drag PDFs/files or type parameters to synthesize complete mock files with real semantic text vectors.
+              Drag PDFs/files or enter text parameters. Gemini will auto-generate dense scholarly chapters with full semantic text vectors.
             </p>
           </div>
 
@@ -346,29 +384,51 @@ export default function Dashboard({ user, onOpenPaper, onNavigateToTab }: Dashbo
               </div>
             )}
 
-            {/* Drag and Drop Box */}
-            <div 
-              onDragEnter={handleDrag}
-              onDragOver={handleDrag}
-              onDragLeave={handleDrag}
-              onDrop={handleDrop}
-              className={`border-2 border-dashed rounded-2xl p-4 text-center transition-colors relative cursor-pointer ${
-                dragActive ? 'border-blue-500 bg-blue-50/20' : 'border-slate-200 hover:border-slate-300'
-              }`}
-            >
-              <input 
-                type="file" 
-                onChange={handleFileChange}
-                accept=".pdf,.txt,.md"
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                id="file_input_field"
-              />
-              <FileUp className="w-6 h-6 text-slate-400 mx-auto mb-1" />
-              <p className="text-xs font-bold text-slate-700">
-                {uploadTitle ? `Selected: ${uploadTitle.substring(0, 30)}...` : 'Drag & drop research paper PDF'}
-              </p>
-              <p className="text-[10px] text-slate-400 mt-0.5">or click to browse local files</p>
-            </div>
+            {isUploading ? (
+              /* Active Upload Animation & Step Progress */
+              <div className="border border-slate-100 bg-slate-50/50 rounded-2xl p-6 text-center space-y-4 flex flex-col justify-center min-h-[140px]" id="uploading_progress_area">
+                <div className="relative w-12 h-12 mx-auto">
+                  <div className="absolute inset-0 rounded-full border-4 border-blue-100"></div>
+                  <div className="absolute inset-0 rounded-full border-4 border-t-blue-600 animate-spin"></div>
+                  <Sparkles className="absolute inset-0 m-auto w-5 h-5 text-blue-500 animate-pulse" />
+                </div>
+                <div className="space-y-1.5">
+                  <p className="text-xs font-bold text-slate-800 animate-pulse">{uploadSteps[uploadStep]}</p>
+                  <p className="text-[10px] text-slate-400 font-mono">Step {uploadStep + 1} of {uploadSteps.length}</p>
+                </div>
+                <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                  <div 
+                    className="bg-blue-600 h-1.5 rounded-full transition-all duration-300"
+                    style={{ width: `${((uploadStep + 1) / uploadSteps.length) * 100}%` }}
+                  />
+                </div>
+              </div>
+            ) : (
+              /* Custom Expanded Drag and Drop Box */
+              <div 
+                onDragEnter={handleDrag}
+                onDragOver={handleDrag}
+                onDragLeave={handleDrag}
+                onDrop={handleDrop}
+                className={`border-2 border-dashed rounded-2xl p-6 text-center transition-all relative cursor-pointer min-h-[140px] flex flex-col justify-center items-center ${
+                  dragActive ? 'border-blue-500 bg-blue-50/20 shadow-inner scale-[0.99]' : 'border-slate-200 hover:border-slate-300'
+                }`}
+              >
+                <input 
+                  type="file" 
+                  onChange={handleFileChange}
+                  accept=".pdf,.txt,.md"
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                  id="file_input_field"
+                />
+                <FileUp className="w-8 h-8 text-blue-500 mx-auto mb-2 group-hover:scale-110 duration-200" />
+                <p className="text-xs font-bold text-slate-700">
+                  {uploadTitle ? `Selected: ${uploadTitle.substring(0, 35)}...` : 'Drag & drop research paper PDF'}
+                </p>
+                <p className="text-[10px] text-slate-400 mt-1">or click to browse local files</p>
+                <p className="text-[9px] text-slate-300 mt-2">Supported Formats: PDF, TXT, MD • Max 50MB</p>
+              </div>
+            )}
 
             {/* Title */}
             <div>
@@ -380,6 +440,7 @@ export default function Dashboard({ user, onOpenPaper, onNavigateToTab }: Dashbo
                 placeholder="e.g. Attention Is All You Need"
                 className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
                 required
+                disabled={isUploading}
                 id="upload_title_field"
               />
             </div>
@@ -394,6 +455,7 @@ export default function Dashboard({ user, onOpenPaper, onNavigateToTab }: Dashbo
                   onChange={e => setUploadAuthors(e.target.value)}
                   placeholder="e.g. Vaswani et al."
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  disabled={isUploading}
                   id="upload_authors_field"
                 />
               </div>
@@ -404,6 +466,7 @@ export default function Dashboard({ user, onOpenPaper, onNavigateToTab }: Dashbo
                   value={uploadYear}
                   onChange={e => setUploadYear(Number(e.target.value))}
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  disabled={isUploading}
                   id="upload_year_field"
                 />
               </div>
@@ -417,10 +480,11 @@ export default function Dashboard({ user, onOpenPaper, onNavigateToTab }: Dashbo
                   value={selectedFolderId}
                   onChange={e => setSelectedFolderId(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  disabled={isUploading}
                   id="upload_folder_field"
                 >
                   <option value="">(None - Root)</option>
-                  {folders.map(f => (
+                  {userFolders.map(f => (
                     <option key={f.id} value={f.id}>{f.name}</option>
                   ))}
                 </select>
@@ -433,6 +497,7 @@ export default function Dashboard({ user, onOpenPaper, onNavigateToTab }: Dashbo
                   onChange={e => setUploadJournal(e.target.value)}
                   placeholder="e.g. NeurIPS, arXiv"
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  disabled={isUploading}
                   id="upload_journal_field"
                 />
               </div>
@@ -444,8 +509,9 @@ export default function Dashboard({ user, onOpenPaper, onNavigateToTab }: Dashbo
               <textarea
                 value={uploadTextContent}
                 onChange={e => setUploadTextContent(e.target.value)}
-                placeholder="Paste paper text here. If left empty, Gemini will auto-generate complete scholarly paper chapters for you based on the title!"
+                placeholder="Paste text contents here. If left empty, Gemini will auto-generate complete scholarly paper chapters for you based on the title!"
                 className="w-full h-16 px-3 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none font-mono"
+                disabled={isUploading}
                 id="upload_raw_content_field"
               />
             </div>
@@ -459,7 +525,7 @@ export default function Dashboard({ user, onOpenPaper, onNavigateToTab }: Dashbo
               {isUploading ? (
                 <>
                   <Sparkles className="w-4 h-4 animate-spin" />
-                  Synthesizing & Parsing PDF Vectors...
+                  Synthesizing & Ingesting Paper...
                 </>
               ) : (
                 <>
@@ -469,90 +535,336 @@ export default function Dashboard({ user, onOpenPaper, onNavigateToTab }: Dashbo
               )}
             </button>
           </form>
+
+          {/* Recent Upload Status */}
+          {papers.length > 0 && (
+            <div className="mt-5 border-t border-slate-100 pt-4" id="recent_ingest_status">
+              <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2.5">Recent Ingest Status</span>
+              <div className="space-y-2">
+                {papers.slice(0, 2).map(p => (
+                  <div key={p.id} className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-xs">
+                    <div className="flex items-center gap-2 truncate">
+                      <FileText className="w-4 h-4 text-blue-500 shrink-0" />
+                      <div className="truncate">
+                        <p className="font-bold text-slate-700 truncate">{p.title}</p>
+                        <p className="text-[9px] text-slate-400">Indexed {formatRelativeTime(p.uploadedAt)} • {p.size}</p>
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-[9px] font-semibold text-emerald-600 border border-emerald-100 flex items-center gap-1 shrink-0">
+                      <span className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse"></span>
+                      Ready
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Study Log Stream */}
+        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm text-left flex flex-col justify-between" id="study_log_stream">
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="font-display font-black text-lg text-slate-900 flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-blue-600" />
+                Study Log Stream
+              </h4>
+              <span className="text-[9px] bg-slate-100 text-slate-600 font-mono font-bold uppercase tracking-wider px-2 py-1 rounded">
+                Real-time Logs
+              </span>
+            </div>
+            
+            <div className="space-y-3 overflow-y-auto max-h-[500px] pr-1" id="activity_feed">
+              {isLoading ? (
+                /* Loading indicators */
+                Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="flex gap-3 animate-pulse border-b border-slate-100 pb-3">
+                    <div className="w-8 h-8 rounded-xl bg-slate-100 shrink-0" />
+                    <div className="space-y-2 flex-1">
+                      <div className="h-3 bg-slate-100 rounded w-2/3" />
+                      <div className="h-2.5 bg-slate-100 rounded w-1/2" />
+                    </div>
+                  </div>
+                ))
+              ) : userActivities.length > 0 ? (
+                userActivities.map((act) => {
+                  const details = getActivityDetails(act);
+                  return (
+                    <div key={act.id} className="flex gap-3 text-xs pb-3 border-b border-slate-100 last:border-b-0 fade-in-up items-start">
+                      <div className={`p-2 rounded-xl shrink-0 h-8 w-8 flex items-center justify-center ${details.bg}`}>
+                        {details.icon}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-slate-800 leading-tight pr-4">{details.title}</p>
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1 text-[10px] text-slate-400">
+                          <span className="font-mono text-slate-500 font-medium max-w-[150px] truncate block" title={act.paperTitle}>
+                            {act.paperTitle}
+                          </span>
+                          <span className="hidden sm:inline">•</span>
+                          <span className="font-mono">{formatRelativeTime(act.timestamp)}</span>
+                        </div>
+                      </div>
+                      <span className="text-[9px] font-bold text-slate-400 border border-slate-200 rounded px-1.5 py-0.5 whitespace-nowrap shrink-0 self-start">
+                        {details.badge}
+                      </span>
+                    </div>
+                  );
+                })
+              ) : (
+                /* Elegant Empty State */
+                <div className="py-16 text-center border border-dashed border-slate-100 rounded-2xl bg-slate-50/50">
+                  <Activity className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                  <p className="text-xs font-semibold text-slate-500">No active research logs recorded yet.</p>
+                  <p className="text-[10px] text-slate-400 mt-1">Upload files or review flashcards to populate logs.</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between text-xs border-t border-slate-100 pt-4 mt-4" id="study_log_footer">
+            <span className="text-slate-500">Registered Activities: <strong>{userActivities.length}</strong></span>
+            <button 
+              onClick={() => onNavigateToTab('library')}
+              className="text-blue-600 font-bold hover:underline flex items-center gap-1.5 text-xs"
+            >
+              Enter Document Library
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* FOOTER SECTION: RECENT ACTIVITIES & PRE-SEEDED FOLDERS QUICK ENTRY */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8" id="dashboard_lower_grid">
-        {/* Left Column: Recent Activities */}
-        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm text-left">
-          <h4 className="font-display font-black text-lg text-slate-900 mb-4 flex items-center gap-2">
-            <Calendar className="w-5 h-5 text-blue-600" />
-            Study Log Stream
-          </h4>
-          <div className="space-y-4" id="activity_feed">
-            {metrics?.recentActivity && metrics.recentActivity.length > 0 ? (
-              metrics.recentActivity.map((act) => (
-                <div key={act.id} className="flex gap-3 text-xs pb-3 border-b border-slate-100 last:border-b-0">
-                  <div className={`p-2 rounded-xl shrink-0 h-8 w-8 flex items-center justify-center ${
-                    act.type === 'read' ? 'bg-blue-50 text-blue-600' :
-                    act.type === 'chat' ? 'bg-purple-50 text-purple-600' :
-                    act.type === 'quiz' ? 'bg-amber-50 text-amber-600' :
-                    act.type === 'note' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-50 text-slate-600'
-                  }`}>
-                    {act.type === 'read' && <FileText className="w-4 h-4" />}
-                    {act.type === 'chat' && <Sparkles className="w-4 h-4" />}
-                    {act.type === 'quiz' && <CheckCircle2 className="w-4 h-4" />}
-                    {act.type === 'note' && <BookOpen className="w-4 h-4" />}
-                  </div>
-                  <div>
-                    <p className="font-bold text-slate-800">{act.detail}</p>
-                    <div className="flex items-center gap-2 mt-0.5 text-[10px] text-slate-400">
-                      <span className="font-mono text-slate-500">{act.paperTitle}</span>
-                      <span>•</span>
-                      <span>{new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                    </div>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <p className="text-xs text-slate-400 font-mono">No activities logged yet.</p>
-            )}
+      {/* WEEKLY INGESTION METRICS */}
+      <div className="bg-slate-950 p-6 sm:p-8 rounded-3xl border border-slate-800 shadow-xl text-left relative overflow-hidden flex flex-col justify-between" id="weekly_metrics_panel">
+        <div className="absolute right-0 top-0 opacity-5 flex items-center pointer-events-none">
+          <TrendingUp className="w-64 h-64 translate-x-12 -translate-y-12 text-blue-500" />
+        </div>
+        
+        <div className="relative z-10">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h4 className="font-display font-black text-lg text-white flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-blue-400" />
+                Weekly Ingestion Metrics
+              </h4>
+              <p className="text-xs text-slate-400 mt-1">Focus analytics tracking dynamic reading logs, annotations, and system interactive minutes.</p>
+            </div>
+            <span className="self-start sm:self-auto text-[10px] bg-slate-800 text-slate-200 font-mono font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border border-slate-700">
+              Minutes Active
+            </span>
           </div>
         </div>
 
-        {/* Right Column: Folders grid */}
-        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm text-left flex flex-col justify-between">
+        {/* SVG Custom Interactive Graph */}
+        <div className="my-8 relative flex-1 min-h-[220px]" id="svg_chart_container">
+          {metrics ? (
+            <>
+              <svg className="w-full h-full min-h-[220px]" viewBox="0 0 500 200" preserveAspectRatio="none">
+                {/* Horizontal gridlines */}
+                {[0, 0.25, 0.5, 0.75, 1].map((ratio, i) => {
+                  const y = 20 + ratio * 140;
+                  const labelVal = Math.round(maxWeeklyMinutes * (1 - ratio));
+                  return (
+                    <g key={i}>
+                      <line x1="45" y1={y} x2="490" y2={y} stroke="#1E293B" strokeWidth="1" strokeDasharray="3 3" />
+                      <text x="5" y={y + 4} fill="#64748B" className="text-[9px] font-mono" textAnchor="start">
+                        {labelVal}m
+                      </text>
+                    </g>
+                  );
+                })}
+
+                {/* Draw active vertical bars */}
+                {metrics.weeklyProgress.map((item, idx) => {
+                  const spacing = 440 / 7;
+                  const x = 50 + idx * spacing + (spacing - 24) / 2;
+                  const barHeight = (item.minutes / maxWeeklyMinutes) * 140;
+                  const y = 160 - barHeight;
+                  const isHovered = hoveredBar === idx;
+
+                  return (
+                    <g key={idx}>
+                      {/* Interactive hover background overlay */}
+                      <rect 
+                        x={x - 6} 
+                        y="15" 
+                        width="36" 
+                        height="150" 
+                        fill="transparent" 
+                        className="cursor-pointer"
+                        onMouseEnter={(e) => handleBarMouseMove(idx, e)}
+                        onMouseMove={(e) => handleBarMouseMove(idx, e)}
+                        onMouseLeave={() => setHoveredBar(null)}
+                      />
+                      
+                      {/* Base Bar (for glowing aesthetic behind) */}
+                      {isHovered && (
+                        <rect
+                          x={x - 2}
+                          y={y - 2}
+                          width="28"
+                          height={Math.max(barHeight + 4, 8)}
+                          rx="6"
+                          fill="#3B82F6"
+                          opacity="0.3"
+                          className="blur-sm transition-all duration-200"
+                        />
+                      )}
+
+                      {/* Actual vertical colored bar */}
+                      <rect
+                        x={x}
+                        y={y}
+                        width="24"
+                        height={Math.max(barHeight, 5)}
+                        rx="5"
+                        fill={isHovered ? '#00E5FF' : idx === new Date().getDay() - 1 ? '#3B82F6' : '#475569'}
+                        className="transition-all duration-200 cursor-pointer"
+                        onMouseEnter={(e) => handleBarMouseMove(idx, e)}
+                        onMouseMove={(e) => handleBarMouseMove(idx, e)}
+                        onMouseLeave={() => setHoveredBar(null)}
+                      />
+
+                      {/* X Axis text label */}
+                      <text
+                        x={x + 12}
+                        y="182"
+                        fill={isHovered ? '#00E5FF' : '#64748B'}
+                        className="text-[10px] font-semibold text-center font-sans"
+                        textAnchor="middle"
+                      >
+                        {item.day}
+                      </text>
+                    </g>
+                  );
+                })}
+              </svg>
+
+              {/* Responsive Tooltip Div */}
+              {hoveredBar !== null && metrics.weeklyProgress[hoveredBar] && (
+                <div 
+                  className="absolute bg-slate-900 border border-slate-700/80 text-white px-3 py-2 rounded-xl text-[10px] font-medium pointer-events-none shadow-xl -translate-x-1/2 transition-all duration-100 z-30"
+                  style={{ left: tooltipPos.x, top: tooltipPos.y }}
+                >
+                  <p className="font-bold text-slate-300 uppercase tracking-wider text-[8px] font-mono">{metrics.weeklyProgress[hoveredBar].day} Focus</p>
+                  <p className="text-[#00E5FF] font-mono mt-0.5 font-bold text-xs">
+                    {metrics.weeklyProgress[hoveredBar].minutes} mins active
+                  </p>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="flex items-center justify-center h-full text-xs text-slate-500 font-mono">
+              Recalculating focus vectors...
+            </div>
+          )}
+        </div>
+        
+        <div className="flex items-center justify-between text-xs border-t border-slate-800 pt-4 relative z-10" id="chart_summary">
+          <span className="text-slate-400">Average Focus Session: <strong>42 mins/day</strong></span>
+          <button 
+            onClick={() => onNavigateToTab('analytics')}
+            className="text-blue-400 hover:text-blue-300 font-bold hover:underline flex items-center gap-1.5 transition-colors"
+          >
+            Analyze Study Patterns
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+
+      {/* CATEGORIZED DIRECTORIES */}
+      <div className="space-y-4" id="categorized_directories_section">
+        <div className="flex items-center justify-between">
           <div>
-            <h4 className="font-display font-black text-lg text-slate-900 mb-2 flex items-center gap-2">
+            <h4 className="font-display font-black text-lg text-slate-900 flex items-center gap-2 text-left">
               <FolderHeart className="w-5 h-5 text-blue-600" />
               Categorized Directories
             </h4>
-            <p className="text-xs text-slate-500 mb-4">Click to jump into specific folder structures inside your Library.</p>
+            <p className="text-xs text-slate-500 mt-0.5">Click folder cards to open structured workspaces within your Research Library.</p>
           </div>
-          
-          <div className="grid grid-cols-2 gap-4 flex-1 my-2" id="dashboard_folders_grid">
-            {folders.length > 0 ? (
-              folders.slice(0, 4).map(fol => {
-                const count = papers.filter(p => p.folderId === fol.id).length;
-                return (
-                  <button
-                    key={fol.id}
-                    onClick={() => onNavigateToTab('library')}
-                    className="p-4 rounded-2xl border border-slate-100 hover:border-blue-200 hover:bg-slate-50/50 text-left transition-all"
-                    id={`folder_card_${fol.id}`}
-                  >
-                    <div 
-                      className="w-3 h-3 rounded-full mb-3" 
-                      style={{ backgroundColor: fol.color }}
-                    />
-                    <h5 className="font-bold text-slate-800 text-sm truncate">{fol.name}</h5>
-                    <p className="text-[10px] text-slate-400 mt-1 font-mono">{count} paper{count !== 1 ? 's' : ''}</p>
-                  </button>
-                );
-              })
-            ) : (
-              <p className="text-xs text-slate-400 font-mono col-span-2">No folders categorized.</p>
-            )}
-          </div>
-
           <button 
             onClick={() => onNavigateToTab('library')}
-            className="w-full text-center py-2.5 text-xs text-blue-600 font-bold hover:bg-blue-50 rounded-xl border border-blue-100 transition-colors"
-            id="all_folders_btn"
+            className="text-xs text-blue-600 font-bold hover:underline flex items-center gap-1"
           >
-            Manage Folders inside Library
+            Manage Folders
+            <ArrowUpRight className="w-3.5 h-3.5" />
           </button>
+        </div>
+        
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6" id="dashboard_folders_grid">
+          {isLoading ? (
+            /* Folder skeletal placeholders */
+            Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="bg-white/40 border border-slate-200/50 p-5 rounded-2xl h-36 animate-pulse" />
+            ))
+          ) : userFolders.length > 0 ? (
+            userFolders.map(fol => {
+              const count = papers.filter(p => p.folderId === fol.id).length;
+              
+              // Blinking status green/blue indicator if any recent user activity occurred on papers in this folder
+              const hasRecent = activities.some(
+                act => act.userId === user.id && 
+                       act.paperId && 
+                       papers.some(p => p.id === act.paperId && p.folderId === fol.id)
+              );
+
+              return (
+                <div
+                  key={fol.id}
+                  className="group relative bg-white/60 hover:bg-white/95 border border-slate-200/50 hover:border-blue-200/80 backdrop-blur-md rounded-2xl p-5 hover:shadow-md hover:scale-[1.02] transition-all duration-300 flex flex-col justify-between text-left cursor-default"
+                  id={`folder_card_${fol.id}`}
+                >
+                  {/* Blinking Recent Indicator dot */}
+                  {hasRecent && (
+                    <span className="absolute top-4 right-4 flex h-2 w-2" title="Recent activity detected in folder">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    </span>
+                  )}
+
+                  <div>
+                    {/* Icon container colored dynamically */}
+                    <div 
+                      className="w-10 h-10 rounded-xl flex items-center justify-center mb-4 transition-all duration-300 group-hover:scale-110"
+                      style={{ backgroundColor: `${fol.color}15`, color: fol.color }}
+                    >
+                      <FolderHeart className="w-5 h-5" style={{ stroke: fol.color }} />
+                    </div>
+
+                    <h5 className="font-bold text-slate-800 text-sm truncate font-display">{fol.name}</h5>
+                    <p className="text-[10px] text-slate-400 mt-1 font-semibold uppercase tracking-wider font-mono">
+                      {count} paper{count !== 1 ? 's' : ''}
+                    </p>
+                  </div>
+
+                  <div className="mt-5 border-t border-slate-100/70 pt-3 flex items-center justify-between text-[11px]">
+                    <span className="text-slate-400 font-medium">
+                      Updated {formatRelativeTime(fol.createdAt)}
+                    </span>
+                    <button 
+                      onClick={() => onNavigateToTab('library')}
+                      className="text-blue-600 hover:text-blue-700 font-bold flex items-center gap-0.5 hover:underline"
+                    >
+                      Quick Open
+                      <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            /* Elegant Empty State for Folders */
+            <div className="col-span-full py-12 text-center bg-white/40 border border-dashed border-slate-200 rounded-3xl p-6">
+              <FolderHeart className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+              <p className="text-xs font-semibold text-slate-500">No active library folders categorized yet.</p>
+              <button 
+                onClick={() => onNavigateToTab('library')}
+                className="text-xs text-blue-600 font-bold hover:underline mt-2 inline-block"
+              >
+                + Create new folder inside library
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
