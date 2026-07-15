@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   ArrowLeft, MessageSquare, BookOpen, Brain, Clipboard,
   Sparkles, CheckCircle, ChevronLeft, ChevronRight, Save, Copy, RefreshCw, AlertCircle,
-  Network, FileText, Star, Search
+  Network, FileText, Star, Search, List
 } from 'lucide-react';
 import { Paper, Flashcard, Quiz, Message, LiteratureReview } from '../types';
 import { papersApi } from '../api/papers';
@@ -28,6 +28,12 @@ export default function PaperViewer({ paperId, onBackToLibrary, userId, onSelect
   const [currentPageNum, setCurrentPageNum] = useState(1);
   const [allPapers, setAllPapers] = useState<Paper[]>([]);
   const [librarySearch, setLibrarySearch] = useState('');
+
+  // NotebookLM Interactive Navigation States
+  const [showOutline, setShowOutline] = useState(false);
+  const [outline, setOutline] = useState<{ title: string; pageNum: number; paragraphIdx: number }[]>([]);
+  const [highlightedPageNum, setHighlightedPageNum] = useState<number | null>(null);
+  const [highlightedParagraphIndex, setHighlightedParagraphIndex] = useState<number | null>(null);
 
   // AI Summary States
   const [aiSummary, setAiSummary] = useState<any>(null);
@@ -128,6 +134,117 @@ export default function PaperViewer({ paperId, onBackToLibrary, userId, onSelect
   const [copiedFormat, setCopiedFormat] = useState<string | null>(null);
   const [citationSavedAlert, setCitationSavedAlert] = useState(false);
 
+  // Interactive Socratic Navigation Grounding Helpers
+  const jumpToPageAndHighlight = (pageNum: number, searchKeyword?: string) => {
+    const targetPage = Math.max(1, Math.min(paper ? paper.pages.length : 1, pageNum));
+    setCurrentPageNum(targetPage);
+    setHighlightedPageNum(targetPage);
+    
+    if (paper && paper.pages[targetPage - 1]) {
+      const paragraphs = paper.pages[targetPage - 1].split('\n\n');
+      let bestIndex = 0;
+      if (searchKeyword) {
+        const keywordLower = searchKeyword.toLowerCase();
+        let bestScore = 0;
+        paragraphs.forEach((p, idx) => {
+          const score = p.toLowerCase().split(keywordLower).length - 1;
+          if (score > bestScore) {
+            bestScore = score;
+            bestIndex = idx;
+          }
+        });
+      }
+      setHighlightedParagraphIndex(bestIndex);
+    } else {
+      setHighlightedParagraphIndex(0);
+    }
+  };
+
+  const jumpToQuizGrounding = (questionText: string) => {
+    if (!paper) return;
+    const keywords = questionText.toLowerCase().split(/\W+/).filter(w => w.length > 4);
+    let bestPage = 1;
+    let bestScore = 0;
+    paper.pages.forEach((p, idx) => {
+      let score = 0;
+      keywords.forEach(word => {
+        if (p.toLowerCase().includes(word)) score += 5;
+      });
+      if (score > bestScore) {
+        bestScore = score;
+        bestPage = idx + 1;
+      }
+    });
+    jumpToPageAndHighlight(bestPage, questionText);
+  };
+
+  const jumpToFlashcardGrounding = (question: string, answer: string) => {
+    if (!paper) return;
+    const keywords = (question + ' ' + answer).toLowerCase().split(/\W+/).filter(w => w.length > 4);
+    let bestPage = 1;
+    let bestScore = 0;
+    paper.pages.forEach((p, idx) => {
+      let score = 0;
+      keywords.forEach(word => {
+        if (p.toLowerCase().includes(word)) score += 5;
+      });
+      if (score > bestScore) {
+        bestScore = score;
+        bestPage = idx + 1;
+      }
+    });
+    jumpToPageAndHighlight(bestPage, question);
+  };
+
+  const jumpToMindmapGrounding = (label: string, description: string) => {
+    if (!paper) return;
+    const keywords = (label + ' ' + description).toLowerCase().split(/\W+/).filter(w => w.length > 4);
+    let bestPage = 1;
+    let bestScore = 0;
+    paper.pages.forEach((p, idx) => {
+      let score = 0;
+      keywords.forEach(word => {
+        if (p.toLowerCase().includes(word)) score += 5;
+      });
+      if (score > bestScore) {
+        bestScore = score;
+        bestPage = idx + 1;
+      }
+    });
+    jumpToPageAndHighlight(bestPage, label);
+  };
+
+  // Build document outline dynamically from page contents
+  useEffect(() => {
+    if (!paper) {
+      setOutline([]);
+      return;
+    }
+    const items: { title: string; pageNum: number; paragraphIdx: number }[] = [];
+    paper.pages.forEach((pageText, pageIdx) => {
+      const lines = pageText.split('\n');
+      lines.forEach((line, lineIdx) => {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('#') || /^(?:[I|V|X]+\.|\d+\.)\s+[A-Z]/.test(trimmed)) {
+          const cleanTitle = trimmed.replace(/^#+\s*/, '');
+          items.push({
+            title: cleanTitle.length > 40 ? cleanTitle.substring(0, 37) + '...' : cleanTitle,
+            pageNum: pageIdx + 1,
+            paragraphIdx: lineIdx
+          });
+        }
+      });
+    });
+    // Fallback if no headings found
+    if (items.length === 0) {
+      items.push({ title: 'Title & Abstract', pageNum: 1, paragraphIdx: 0 });
+      if (paper.pages.length > 1) items.push({ title: 'Proposed Methodology', pageNum: 2, paragraphIdx: 0 });
+      if (paper.pages.length > 2) items.push({ title: 'Evaluation Framework', pageNum: 3, paragraphIdx: 0 });
+      if (paper.pages.length > 3) items.push({ title: 'Conclusions & References', pageNum: 4, paragraphIdx: 0 });
+    }
+    setOutline(items);
+  }, [paper]);
+
   // Fetch all papers for picker or comparison list
   useEffect(() => {
     papersApi.getAll()
@@ -203,6 +320,15 @@ export default function PaperViewer({ paperId, onBackToLibrary, userId, onSelect
     fetchPaperDetails();
   }, [paperId]);
 
+  // Auto-compile summary on load to prevent empty screen state
+  useEffect(() => {
+    if (paper && !aiSummary && paperId !== 'all') {
+      loadSummary(paper.id).catch(err => {
+        console.warn('Auto-compiling summary failed on load', err);
+      });
+    }
+  }, [paper, aiSummary, paperId]);
+
   // Load Notes & Chats when paper is loaded
   useEffect(() => {
     if (!paper) return;
@@ -254,6 +380,16 @@ export default function PaperViewer({ paperId, onBackToLibrary, userId, onSelect
   useEffect(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages, chatLoading]);
+
+  // Scroll active paragraph in left pane to viewport center
+  useEffect(() => {
+    if (highlightedPageNum === currentPageNum && highlightedParagraphIndex !== null) {
+      const el = document.getElementById(`p-idx-${highlightedParagraphIndex}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+  }, [currentPageNum, highlightedPageNum, highlightedParagraphIndex]);
 
   // Save Notes Handler
   const handleSaveNotes = async () => {
@@ -555,12 +691,26 @@ export default function PaperViewer({ paperId, onBackToLibrary, userId, onSelect
       <div className="flex-1 flex overflow-hidden" id="workspace_panes_container">
         
         {/* LEFT PANE: Scholarly Document Page-by-Page viewport (50% wide) */}
-        <div className="w-1/2 border-r border-slate-200 flex flex-col justify-between bg-white overflow-hidden" id="workspace_doc_pane">
+        <div className="w-1/2 border-r border-slate-200 flex flex-col justify-between bg-white overflow-hidden relative" id="workspace_doc_pane">
           {/* Document page context topbar */}
           <div className="px-6 py-3 bg-slate-50/50 border-b border-slate-100 flex items-center justify-between shrink-0">
-            <span className="text-xs text-slate-500 font-bold uppercase tracking-wider font-mono">
-              Page {currentPageNum} of {paper.pages.length}
-            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowOutline(prev => !prev)}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  showOutline 
+                    ? 'bg-blue-100 text-blue-700 shadow-sm' 
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+                title="Toggle Document Outline"
+              >
+                <List className="w-3.5 h-3.5" />
+                Outline
+              </button>
+              <span className="text-xs text-slate-500 font-bold uppercase tracking-wider font-mono">
+                Page {currentPageNum} of {paper.pages.length}
+              </span>
+            </div>
             <div className="flex items-center gap-1.5">
               <button
                 onClick={() => setCurrentPageNum(prev => Math.max(1, prev - 1))}
@@ -581,27 +731,75 @@ export default function PaperViewer({ paperId, onBackToLibrary, userId, onSelect
             </div>
           </div>
 
-          {/* Actual scrolling Page document contents */}
-          <div className="flex-1 overflow-y-auto px-10 py-12 text-left leading-relaxed font-sans text-slate-800" id="doc_text_viewport">
-            <div className="max-w-2xl mx-auto space-y-6 select-text">
-              {currentPageNum === 1 && (
-                <div className="border-b border-slate-100 pb-6 mb-6">
-                  <h1 className="font-display font-black text-2xl text-slate-900 leading-snug">{paper.title}</h1>
-                  <p className="text-sm font-semibold text-slate-600 mt-2">{paper.authors}</p>
-                  <p className="text-xs text-slate-400 mt-1 font-mono">{paper.journal} • {paper.year}</p>
+          {/* SPLIT SCREEN BODY FOR OUTLINE AND SOURCE VIEWPORT */}
+          <div className="flex-1 flex overflow-hidden">
+            {/* COLLAPSIBLE SIDEBAR OUTLINE */}
+            {showOutline && (
+              <div className="w-1/3 border-r border-slate-100 bg-slate-50/50 overflow-y-auto p-4 space-y-3 shrink-0 text-left">
+                <h6 className="text-[10px] font-black uppercase text-slate-400 tracking-wider font-mono flex items-center gap-1">
+                  <Clipboard className="w-3 h-3" />
+                  Index Outline
+                </h6>
+                <div className="space-y-1">
+                  {outline.map((item, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => {
+                        setCurrentPageNum(item.pageNum);
+                        setHighlightedPageNum(item.pageNum);
+                        setHighlightedParagraphIndex(0);
+                      }}
+                      className={`w-full text-left p-2 rounded-xl text-[11px] leading-snug font-semibold block transition-all ${
+                        currentPageNum === item.pageNum
+                          ? 'bg-blue-100/60 text-blue-800 border-l-2 border-blue-600 pl-2 font-black shadow-sm'
+                          : 'text-slate-600 hover:bg-slate-150/55 hover:text-slate-900'
+                      }`}
+                    >
+                      <span className="block text-[9px] text-slate-400 font-mono">Page {item.pageNum}</span>
+                      <span className="truncate block mt-0.5">{item.title}</span>
+                    </button>
+                  ))}
                 </div>
-              )}
+              </div>
+            )}
 
-              {/* Page body content segments */}
-              <div className="prose prose-slate prose-sm text-sm font-normal text-slate-800 whitespace-pre-wrap leading-relaxed tracking-normal font-sans">
-                {paper.pages[currentPageNum - 1] || "This page has no content blocks."}
+            {/* Actual scrolling Page document contents */}
+            <div className="flex-1 overflow-y-auto px-10 py-12 text-left leading-relaxed font-sans text-slate-800" id="doc_text_viewport">
+              <div className="max-w-2xl mx-auto space-y-6 select-text">
+                {currentPageNum === 1 && (
+                  <div className="border-b border-slate-100 pb-6 mb-6">
+                    <h1 className="font-display font-black text-2xl text-slate-900 leading-snug">{paper.title}</h1>
+                    <p className="text-sm font-semibold text-slate-600 mt-2">{paper.authors}</p>
+                    <p className="text-xs text-slate-400 mt-1 font-mono">{paper.journal} • {paper.year}</p>
+                  </div>
+                )}
+
+                {/* Page body content split by paragraph for precise highlighting & citation grounding */}
+                <div className="space-y-4">
+                  {(paper.pages[currentPageNum - 1] || "This page has no content blocks.").split('\n\n').map((pText, pIdx) => {
+                    const isHighlighted = highlightedPageNum === currentPageNum && highlightedParagraphIndex === pIdx;
+                    return (
+                      <div
+                        key={pIdx}
+                        id={`p-idx-${pIdx}`}
+                        className={`transition-all duration-300 p-2.5 -mx-2.5 rounded-xl border border-transparent text-sm leading-relaxed text-slate-800 font-normal select-text whitespace-pre-wrap ${
+                          isHighlighted
+                            ? 'bg-amber-50 border-amber-200 shadow-sm font-medium text-slate-900 ring-2 ring-amber-400/20'
+                            : 'hover:bg-slate-50/50'
+                        }`}
+                      >
+                        {pText}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </div>
 
           {/* Bottom quick notes notifier */}
           <div className="px-6 py-2.5 bg-slate-50 border-t border-slate-100 text-[10px] text-slate-400 font-mono text-center">
-            Tip: You can highlight and copy any text block in this pane for AI referencing.
+            Tip: Click on any AI source citation badge to instantly jump, scroll, and highlight grounding context.
           </div>
         </div>
 
@@ -684,31 +882,43 @@ export default function PaperViewer({ paperId, onBackToLibrary, userId, onSelect
                       Synthesizing executive highlights with Gemini...
                     </div>
                   ) : aiSummary ? (
-                    <div className="text-xs text-slate-755 leading-relaxed space-y-4 font-medium">
+                    <div className="text-xs text-slate-755 leading-relaxed space-y-5 font-medium">
                       {typeof aiSummary === 'object' ? (
                         <>
                           {aiSummary.coreProblem && (
-                            <div>
-                              <h6 className="font-bold text-slate-900 uppercase tracking-wide text-[10px] mb-1">Core Problem & Hypotheses:</h6>
-                              <p className="text-slate-650 leading-relaxed">{aiSummary.coreProblem}</p>
+                            <div className="p-4 bg-slate-50/50 border border-slate-100 rounded-2xl">
+                              <h6 className="font-black text-slate-900 uppercase tracking-wide text-[10px] mb-1.5 flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />
+                                Core Hypotheses & Research Objectives
+                              </h6>
+                              <p className="text-slate-650 leading-relaxed pl-3 border-l border-blue-100">{aiSummary.coreProblem}</p>
                             </div>
                           )}
                           {aiSummary.methodology && (
-                            <div>
-                              <h6 className="font-bold text-slate-900 uppercase tracking-wide text-[10px] mb-1">Proposed Methodology & Model:</h6>
-                              <p className="text-slate-650 leading-relaxed">{aiSummary.methodology}</p>
+                            <div className="p-4 bg-slate-50/50 border border-slate-100 rounded-2xl">
+                              <h6 className="font-black text-slate-900 uppercase tracking-wide text-[10px] mb-1.5 flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                                Proposed Methodology & Architecture
+                              </h6>
+                              <p className="text-slate-650 leading-relaxed pl-3 border-l border-amber-100">{aiSummary.methodology}</p>
                             </div>
                           )}
                           {aiSummary.findings && (
-                            <div>
-                              <h6 className="font-bold text-slate-900 uppercase tracking-wide text-[10px] mb-1">Key Discoveries & Benchmarks:</h6>
-                              <p className="text-slate-650 leading-relaxed">{aiSummary.findings}</p>
+                            <div className="p-4 bg-slate-50/50 border border-slate-100 rounded-2xl">
+                              <h6 className="font-black text-slate-900 uppercase tracking-wide text-[10px] mb-1.5 flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                Key Discoveries & Quantitative Results
+                              </h6>
+                              <p className="text-slate-650 leading-relaxed pl-3 border-l border-emerald-100">{aiSummary.findings}</p>
                             </div>
                           )}
                           {aiSummary.limitations && (
-                            <div>
-                              <h6 className="font-bold text-slate-900 uppercase tracking-wide text-[10px] mb-1">Assumptions & Limitations:</h6>
-                              <p className="text-slate-650 leading-relaxed">{aiSummary.limitations}</p>
+                            <div className="p-4 bg-red-50/20 border border-red-100/40 rounded-2xl">
+                              <h6 className="font-black text-red-950 uppercase tracking-wide text-[10px] mb-1.5 flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                                Research Gaps & Boundaries
+                              </h6>
+                              <p className="text-slate-650 leading-relaxed pl-3 border-l border-red-150">{aiSummary.limitations}</p>
                             </div>
                           )}
                         </>
@@ -775,7 +985,11 @@ export default function PaperViewer({ paperId, onBackToLibrary, userId, onSelect
                              ? 'bg-slate-900 text-white font-medium rounded-tr-none' 
                             : 'bg-white border border-slate-200 text-slate-800 rounded-tl-none shadow-sm'
                         }`}>
-                          <p className="whitespace-pre-wrap">{msg.text}</p>
+                          {msg.sender === 'user' ? (
+                            <p className="whitespace-pre-wrap">{msg.text}</p>
+                          ) : (
+                            <FormattedMessageText text={msg.text} onJump={(page) => jumpToPageAndHighlight(page)} />
+                          )}
 
                           {/* Sources citation attachments */}
                           {msg.sources && msg.sources.length > 0 && (
@@ -785,8 +999,8 @@ export default function PaperViewer({ paperId, onBackToLibrary, userId, onSelect
                                 {msg.sources.map((src, sIdx) => (
                                   <button
                                     key={sIdx}
-                                    onClick={() => src.page && setCurrentPageNum(src.page)}
-                                    className="p-1.5 bg-slate-50 border hover:border-blue-200 text-slate-500 rounded-lg text-[10px] font-semibold flex items-center justify-between text-left transition-colors"
+                                    onClick={() => src.page && jumpToPageAndHighlight(src.page, src.snippet)}
+                                    className="p-1.5 bg-slate-50 border hover:border-blue-200 text-slate-500 rounded-lg text-[10px] font-semibold flex items-center justify-between text-left transition-colors cursor-pointer"
                                     title="Click to jump to page source"
                                   >
                                     <span className="truncate">{src.title}</span>
@@ -1120,6 +1334,14 @@ export default function PaperViewer({ paperId, onBackToLibrary, userId, onSelect
                         Flag (Hard)
                       </button>
                     </div>
+
+                    <button
+                      onClick={() => jumpToFlashcardGrounding(flashcards[currentCardIdx].question, flashcards[currentCardIdx].answer)}
+                      className="w-full mt-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-xl transition-all text-center flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <BookOpen className="w-3.5 h-3.5" />
+                      Verify Grounding Context
+                    </button>
                   </div>
                 ) : (
                   <p className="text-xs text-slate-400 font-mono my-12">No cards available for this document.</p>
@@ -1160,9 +1382,18 @@ export default function PaperViewer({ paperId, onBackToLibrary, userId, onSelect
                     {/* Question listings */}
                     {quizzes[0].questions.map((q, qIdx) => (
                       <div key={qIdx} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-3 text-left">
-                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider font-mono">
-                          Question {qIdx + 1}
-                        </span>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider font-mono">
+                            Question {qIdx + 1}
+                          </span>
+                          <button
+                            onClick={() => jumpToQuizGrounding(q.question)}
+                            className="inline-flex items-center gap-1 text-[10px] text-blue-600 hover:text-blue-800 font-bold transition-colors cursor-pointer"
+                          >
+                            <BookOpen className="w-3 h-3" />
+                            Grounding Source
+                          </button>
+                        </div>
                         <h5 className="font-sans font-bold text-slate-800 text-xs leading-normal">
                           {q.question}
                         </h5>
@@ -1436,6 +1667,13 @@ export default function PaperViewer({ paperId, onBackToLibrary, userId, onSelect
                         <p className="text-xs text-slate-600 leading-relaxed font-medium">
                           {selectedMindmapNode.description}
                         </p>
+                        <button
+                          onClick={() => jumpToMindmapGrounding(selectedMindmapNode.label, selectedMindmapNode.description)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-[10px] font-bold rounded-lg transition-colors cursor-pointer w-full justify-center mt-2"
+                        >
+                          <BookOpen className="w-3.5 h-3.5" />
+                          Review Grounding Context
+                        </button>
                       </div>
                     )}
                   </div>
@@ -1454,5 +1692,65 @@ export default function PaperViewer({ paperId, onBackToLibrary, userId, onSelect
 
       </div>
     </div>
+  );
+}
+
+interface FormattedMessageTextProps {
+  text: string;
+  onJump: (pageNum: number, searchKeyword?: string) => void;
+}
+
+function FormattedMessageText({ text, onJump }: FormattedMessageTextProps) {
+  if (!text) return null;
+
+  // Match expressions like "[Page X]", "[page X]", "Page X", "page X", or "[Chunk Y]"
+  const regex = /(\[Page\s*(\d+)\]|\bPage\s*(\d+)\b|\[Chunk\s*(\d+)\])/gi;
+  const tokens: { type: 'text' | 'citation'; content: string; pageNum?: number }[] = [];
+  
+  let match;
+  let lastIndex = 0;
+  regex.lastIndex = 0;
+  
+  while ((match = regex.exec(text)) !== null) {
+    const matchIndex = match.index;
+    const matchText = match[0];
+    const pageNum = parseInt(match[2] || match[3] || match[4] || '1', 10);
+    
+    if (matchIndex > lastIndex) {
+      tokens.push({ type: 'text', content: text.substring(lastIndex, matchIndex) });
+    }
+    
+    tokens.push({ type: 'citation', content: matchText, pageNum });
+    lastIndex = regex.lastIndex;
+  }
+  
+  if (lastIndex < text.length) {
+    tokens.push({ type: 'text', content: text.substring(lastIndex) });
+  }
+
+  if (tokens.length === 0) {
+    return <p className="whitespace-pre-wrap leading-relaxed">{text}</p>;
+  }
+
+  return (
+    <p className="whitespace-pre-wrap leading-relaxed select-text">
+      {tokens.map((token, idx) => {
+        if (token.type === 'citation' && token.pageNum) {
+          const page = token.pageNum;
+          return (
+            <button
+              key={idx}
+              onClick={() => onJump(page)}
+              className="inline-flex items-center gap-0.5 bg-blue-50 hover:bg-blue-100 text-blue-700 hover:text-blue-900 font-bold px-1.5 py-0.5 rounded text-[10px] font-mono mx-1 cursor-pointer transition-colors shadow-sm align-middle"
+              title={`Jump to Page ${page}`}
+            >
+              <BookOpen className="w-3 h-3 inline shrink-0" />
+              Page {page}
+            </button>
+          );
+        }
+        return <span key={idx}>{token.content}</span>;
+      })}
+    </p>
   );
 }
