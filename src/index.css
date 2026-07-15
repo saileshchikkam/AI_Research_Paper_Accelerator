@@ -335,3 +335,44 @@ html.dark {
 .dark .text-red-600 { color: #f87171 !important; }
 .dark .border-red-100 { border-color: rgba(239, 68, 68, 0.15) !important; }
 .dark .bg-red-50 { background-color: rgba(239, 68, 68, 0.1) !important; }
+
+/* ====================================================
+   GLOBAL TYPOGRAPHY ENHANCEMENT & SCALE RULES
+   ==================================================== */
+body {
+  font-size: 15px;
+}
+
+/* Balance micro labels and utility details */
+.text-\[8px\] {
+  font-size: 9.5px !important;
+}
+.text-\[9px\] {
+  font-size: 10.5px !important;
+}
+.text-\[10px\] {
+  font-size: 11.5px !important;
+}
+.text-xs {
+  font-size: 0.825rem !important; /* ~13.2px */
+}
+.text-sm {
+  font-size: 0.925rem !important; /* ~14.8px */
+}
+.text-base {
+  font-size: 1.05rem !important; /* ~16.8px */
+}
+.text-lg {
+  font-size: 1.15rem !important; /* ~18.4px */
+}
+.text-xl {
+  font-size: 1.3rem !important; /* ~20.8px */
+}
+.text-2xl {
+  font-size: 1.6rem !important; /* ~25.6px */
+}
+
+/* Ensure inputs, selects, and textareas are comfortable */
+input, select, textarea {
+  font-size: 0.925rem !important; /* ~14.8px */
+}
