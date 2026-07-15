@@ -42,15 +42,29 @@ const PORT = 3000;
 
 // Database connection guarantee middleware to prevent queries before connection (Task 2 & 8)
 app.use(async (req, res, next) => {
+  // Only intercept API requests (Task 2 & 8)
+  if (!req.path.startsWith('/api')) {
+    return next();
+  }
+
+  // Check if MONGODB_URI is provided
+  if (!process.env.MONGODB_URI) {
+    return res.status(503).json({
+      success: false,
+      error: "MONGODB_URI is missing",
+      message: "The MONGODB_URI environment variable is missing. Please configure it in the Settings menu in AI Studio to connect your MongoDB Atlas database."
+    });
+  }
+
   try {
     await connectDB();
     next();
   } catch (err: any) {
-    console.error("Database connection check middleware failed:", err.message || err);
+    console.warn("Database connection check middleware failed:", err.message || err);
     res.status(500).json({
       success: false,
       error: "Database Connection Error",
-      message: "The server is currently unable to communicate with the database. Please try again later."
+      message: "The server is currently unable to communicate with the database. " + (err.message || err)
     });
   }
 });
@@ -1053,27 +1067,40 @@ async function startServer() {
   // Load environment variables (already done via dotenv.config())
 
   console.log("Checking MONGODB_URI...");
-  if (!process.env.MONGODB_URI) {
-    console.error("CRITICAL ERROR: MONGODB_URI environment variable is missing.");
-    process.exit(1);
+  const hasMongoUri = !!process.env.MONGODB_URI;
+  if (!hasMongoUri) {
+    if (process.env.NODE_ENV === 'production') {
+      console.error("CRITICAL ERROR: MONGODB_URI environment variable is missing.");
+      process.exit(1);
+    } else {
+      console.log("Database connection postponed: MONGODB_URI is not configured in Settings.");
+    }
   }
 
-  console.log("Connecting to MongoDB Atlas...");
-  try {
-    await connectDB();
-    console.log("MongoDB Connected Successfully");
-    console.log("Database Ready");
-  } catch (err: any) {
-    console.error("CRITICAL ERROR: Failed to connect to MongoDB on startup:", err.message || err);
-    process.exit(1);
-  }
+  if (hasMongoUri) {
+    console.log("Connecting to MongoDB Atlas...");
+    try {
+      await connectDB();
+      console.log("MongoDB Connected Successfully");
+      console.log("Database Ready");
 
-  // Explicitly trigger MongoDB seeding AFTER successful database connection (Task 2)
-  try {
-    console.log("Seeding Database if needed...");
-    await db.seedMongoDBIfNeeded();
-  } catch (seedErr: any) {
-    console.error("Database seeding failed:", seedErr.message || seedErr);
+      // Explicitly trigger MongoDB seeding AFTER successful database connection (Task 2)
+      try {
+        console.log("Seeding Database if needed...");
+        await db.seedMongoDBIfNeeded();
+      } catch (seedErr: any) {
+        console.warn("Database seeding failed:", seedErr.message || seedErr);
+      }
+    } catch (err: any) {
+      if (process.env.NODE_ENV === 'production') {
+        console.error("CRITICAL ERROR: Failed to connect to MongoDB on startup:", err.message || err);
+        process.exit(1);
+      } else {
+        console.log("Database connection postponed: Could not connect to MongoDB Atlas on startup.");
+      }
+    }
+  } else {
+    console.log("Skipping MongoDB connection on startup because MONGODB_URI is not configured.");
   }
 
   if (process.env.VERCEL) {

@@ -32,8 +32,12 @@ export const connectDB = async (): Promise<typeof mongoose> => {
   // Validate that process.env.MONGODB_URI is used exclusively (Task 6)
   const MONGODB_URI = process.env.MONGODB_URI;
   if (!MONGODB_URI) {
-    console.error('CRITICAL ERROR: MONGODB_URI environment variable is missing.');
-    process.exit(1);
+    if (process.env.NODE_ENV === 'production') {
+      console.error('CRITICAL ERROR: MONGODB_URI environment variable is missing.');
+      process.exit(1);
+    } else {
+      throw new Error('MONGODB_URI environment variable is missing.');
+    }
   }
 
   // If already connected, reuse the connection (Task 8)
@@ -53,8 +57,12 @@ export const connectDB = async (): Promise<typeof mongoose> => {
     })
     .catch((err) => {
       cachedConnectionPromise = null; // Reset cache on failure
-      console.error('CRITICAL ERROR: MongoDB connection failed:', err);
-      process.exit(1); // Exit process with failure (Task 4)
+      if (process.env.NODE_ENV === 'production') {
+        console.error('CRITICAL ERROR: MongoDB connection failed:', err);
+        process.exit(1); // Exit process with failure (Task 4)
+      } else {
+        throw err;
+      }
     });
 
   return cachedConnectionPromise;
