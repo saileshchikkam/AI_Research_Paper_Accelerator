@@ -24,6 +24,9 @@ export interface Paper {
   pages: string[]; // Segmented into pages
   citations: CitationData;
   readingProgress: number; // 0 to 100
+  chunks?: any[];
+  summary?: any;
+  insights?: any;
 }
 
 export interface CitationData {

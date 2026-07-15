@@ -1,10 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  ArrowLeft, MessageSquare, BookOpen, Clock, Brain, Clipboard, Bookmark,
+  ArrowLeft, MessageSquare, BookOpen, Brain, Clipboard,
   Sparkles, CheckCircle, ChevronLeft, ChevronRight, Save, Copy, RefreshCw, AlertCircle,
-  Network, FileText, Star, Search, Plus, Trash2, Folder
+  Network, FileText, Star, Search
 } from 'lucide-react';
-import { Paper, Flashcard, Quiz, Note, Message, LiteratureReview } from '../types';
+import { Paper, Flashcard, Quiz, Message, LiteratureReview } from '../types';
+import { papersApi } from '../api/papers';
+import { chatApi } from '../api/chat';
+import { summaryApi } from '../api/summary';
+import { quizApi } from '../api/quiz';
+import { flashcardsApi } from '../api/flashcards';
+import { citationsApi } from '../api/citations';
+import { useLoading, useAIRequest } from '../hooks/useAI';
+import { APIError } from '../api/client';
 
 interface PaperViewerProps {
   paperId: string | null;
@@ -22,15 +30,40 @@ export default function PaperViewer({ paperId, onBackToLibrary, userId, onSelect
   const [librarySearch, setLibrarySearch] = useState('');
 
   // AI Summary States
-  const [aiSummary, setAiSummary] = useState<string | null>(null);
-  const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
+  const [aiSummary, setAiSummary] = useState<any>(null);
+  const { isLoading: aiSummaryLoading, execute: loadSummary } = useAIRequest(
+    async (pid: string) => {
+      const summaryObj = await summaryApi.getSummary(pid);
+      return summaryObj;
+    },
+    {
+      onSuccess: (data) => setAiSummary(data)
+    }
+  );
 
   // Insights / Multi-paper comparison States
   const [comparePaperIds, setComparePaperIds] = useState<string[]>([]);
   const [reviews, setReviews] = useState<LiteratureReview[]>([]);
   const [selectedReview, setSelectedReview] = useState<LiteratureReview | null>(null);
-  const [compareLoading, setCompareLoading] = useState(false);
   const [compareError, setCompareError] = useState('');
+  const { isLoading: compareLoading, execute: generateReview } = useAIRequest(
+    async (data: { title: string; paperIds: string[]; userId: string }) => {
+      const response = await fetch('/api/reviews', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Failed to generate review.');
+      }
+      return await response.json() as LiteratureReview;
+    },
+    {
+      onSuccess: (data) => setSelectedReview(data),
+      onError: (err) => setCompareError(err)
+    }
+  );
 
   // Notes States
   const [noteTitle, setNoteTitle] = useState('Study Notes');
@@ -42,26 +75,54 @@ export default function PaperViewer({ paperId, onBackToLibrary, userId, onSelect
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
   const [chatSessionId, setChatSessionId] = useState<string | null>(null);
   const [chatInput, setChatInput] = useState('');
-  const [chatLoading, setChatLoading] = useState(false);
+  const { isLoading: chatLoading, execute: sendChatMessage } = useAIRequest(
+    async (msgText: string) => {
+      if (!chatSessionId) throw new Error('Chat session not initialized.');
+      return await chatApi.sendMessage(chatSessionId, msgText, userId);
+    }
+  );
   const chatBottomRef = useRef<HTMLDivElement | null>(null);
 
   // Flashcards States
   const [flashcards, setFlashcards] = useState<Flashcard[]>([]);
   const [currentCardIdx, setCurrentCardIdx] = useState(0);
   const [isCardFlipped, setIsCardFlipped] = useState(false);
-  const [cardsLoading, setCardsLoading] = useState(false);
+  const { isLoading: cardsLoading, execute: loadFlashcards } = useAIRequest(
+    async (pid: string) => await flashcardsApi.getCards(pid),
+    {
+      onSuccess: (cards) => setFlashcards(cards)
+    }
+  );
 
   // Quiz States
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [quizAnswers, setQuizAnswers] = useState<Record<number, number>>({});
   const [quizSubmitted, setQuizSubmitted] = useState(false);
   const [quizScore, setQuizScore] = useState(0);
-  const [quizLoading, setQuizLoading] = useState(false);
+  const { isLoading: quizLoading, execute: loadQuiz } = useAIRequest(
+    async (pid: string) => await quizApi.getQuiz(pid),
+    {
+      onSuccess: (quizList) => setQuizzes(quizList)
+    }
+  );
 
   // Mindmap states
   const [mindmapData, setMindmapData] = useState<{ nodes: any[]; links: any[] } | null>(null);
-  const [mindmapLoading, setMindmapLoading] = useState(false);
   const [selectedMindmapNode, setSelectedMindmapNode] = useState<any | null>(null);
+  const { isLoading: mindmapLoading, execute: loadMindmap } = useAIRequest(
+    async (pid: string) => {
+      const response = await fetch(`/api/papers/${pid}/mindmap`);
+      return await response.json();
+    },
+    {
+      onSuccess: (data) => {
+        setMindmapData(data);
+        if (data.nodes && data.nodes.length > 0) {
+          setSelectedMindmapNode(data.nodes.find((n: any) => n.group === 'title') || data.nodes[0]);
+        }
+      }
+    }
+  );
 
   // Citation Center States
   const [copiedFormat, setCopiedFormat] = useState<string | null>(null);
@@ -69,8 +130,7 @@ export default function PaperViewer({ paperId, onBackToLibrary, userId, onSelect
 
   // Fetch all papers for picker or comparison list
   useEffect(() => {
-    fetch('/api/papers')
-      .then(res => res.json())
+    papersApi.getAll()
       .then(data => setAllPapers(data))
       .catch(err => console.error('Error fetching all papers', err));
 
@@ -119,24 +179,17 @@ export default function PaperViewer({ paperId, onBackToLibrary, userId, onSelect
           };
           setPaper(allPaper);
         } else {
-          const res = await fetch(`/api/papers`);
-          if (res.ok) {
-            const list: Paper[] = await res.json();
-            const p = list.find(item => item.id === paperId);
-            if (p) {
-              setPaper(p);
-              // Reset tab to summary on loading new paper
-              setActiveRightTab('summary');
-              setAiSummary(null);
-              // Increment reading progress slightly on initial open for analytics
-              if (p.readingProgress < 15) {
-                await fetch(`/api/papers/${p.id}`, {
-                  method: 'PUT',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ readingProgress: 15 })
-                });
-                p.readingProgress = 15;
-              }
+          const list = await papersApi.getAll();
+          const p = list.find(item => item.id === paperId);
+          if (p) {
+            setPaper(p);
+            setActiveRightTab('summary');
+            setAiSummary(p.summary || null);
+            
+            // Increment reading progress slightly on initial open for analytics
+            if (p.readingProgress < 15) {
+              await papersApi.update(p.id, { readingProgress: 15 });
+              p.readingProgress = 15;
             }
           }
         }
@@ -164,80 +217,38 @@ export default function PaperViewer({ paperId, onBackToLibrary, userId, onSelect
       .catch(err => console.error('Error fetching notes', err));
 
     // Initialize or load active chat session
-    fetch(`/api/chats?paperId=${paperId}`)
-      .then(res => res.json())
+    chatApi.getSessions(paperId || undefined)
       .then(async (sessions) => {
         if (sessions.length > 0) {
           setChatSessionId(sessions[0].id);
           setChatMessages(sessions[0].messages || []);
-        } else {
+        } else if (paperId) {
           // Create new chat session
-          const newSessRes = await fetch('/api/chats', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ paperId, title: `Discussion - ${paper.title.substring(0, 30)}` })
-          });
-          if (newSessRes.ok) {
-            const newSess = await newSessRes.json();
-            setChatSessionId(newSess.id);
-            setChatMessages([]);
-          }
+          const newSess = await chatApi.createSession(paperId, `Discussion - ${paper.title.substring(0, 30)}`);
+          setChatSessionId(newSess.id);
+          setChatMessages([]);
         }
       })
       .catch(err => console.error('Error setting up chat session', err));
 
-  }, [paper]);
+  }, [paper, paperId]);
 
   // Load right pane components on demand to optimize performance
   useEffect(() => {
-    if (!paper) return;
+    if (!paper || !paperId) return;
 
     if (activeRightTab === 'flashcards' && flashcards.length === 0) {
-      setCardsLoading(true);
-      fetch(`/api/papers/${paperId}/flashcards`)
-        .then(res => res.json())
-        .then(data => {
-          setFlashcards(data);
-          setCardsLoading(false);
-        })
-        .catch(err => {
-          console.error(err);
-          setCardsLoading(false);
-        });
+      loadFlashcards(paperId).catch(console.error);
     }
 
     if (activeRightTab === 'quiz' && quizzes.length === 0) {
-      setQuizLoading(true);
-      fetch(`/api/papers/${paperId}/quiz`)
-        .then(res => res.json())
-        .then(data => {
-          setQuizzes(data);
-          setQuizLoading(false);
-        })
-        .catch(err => {
-          console.error(err);
-          setQuizLoading(false);
-        });
+      loadQuiz(paperId).catch(console.error);
     }
 
     if (activeRightTab === 'mindmap' && !mindmapData) {
-      setMindmapLoading(true);
-      fetch(`/api/papers/${paperId}/mindmap`)
-        .then(res => res.json())
-        .then(data => {
-          setMindmapData(data);
-          setMindmapLoading(false);
-          // Auto-select root/title node
-          if (data.nodes && data.nodes.length > 0) {
-            setSelectedMindmapNode(data.nodes.find((n: any) => n.group === 'title') || data.nodes[0]);
-          }
-        })
-        .catch(err => {
-          console.error(err);
-          setMindmapLoading(false);
-        });
+      loadMindmap(paperId).catch(console.error);
     }
-  }, [activeRightTab, paper]);
+  }, [activeRightTab, paper, paperId, flashcards.length, quizzes.length, mindmapData, loadFlashcards, loadQuiz, loadMindmap]);
 
   // Scroll chat to bottom
   useEffect(() => {
@@ -246,6 +257,7 @@ export default function PaperViewer({ paperId, onBackToLibrary, userId, onSelect
 
   // Save Notes Handler
   const handleSaveNotes = async () => {
+    if (!paperId) return;
     setNoteSaving(true);
     try {
       const res = await fetch(`/api/papers/${paperId}/notes`, {
@@ -275,7 +287,6 @@ export default function PaperViewer({ paperId, onBackToLibrary, userId, onSelect
 
     const userText = chatInput;
     setChatInput('');
-    setChatLoading(true);
 
     // Append local message immediately for zero lag
     const tempUserMsg: Message = {
@@ -287,28 +298,22 @@ export default function PaperViewer({ paperId, onBackToLibrary, userId, onSelect
     setChatMessages(prev => [...prev, tempUserMsg]);
 
     try {
-      const res = await fetch(`/api/chats/${chatSessionId}/messages`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text: userText,
-          sender: 'user',
-          userId
-        })
+      const aiResponse = await sendChatMessage(userText);
+      setChatMessages(prev => {
+        // Remove temp user message and replace with updated server response to ensure ID sync
+        const filtered = prev.filter(m => m.id !== tempUserMsg.id);
+        return [...filtered, tempUserMsg, aiResponse];
       });
-
-      if (res.ok) {
-        const aiResponse: Message = await res.json();
-        setChatMessages(prev => {
-          // Remove temp user message and replace with updated server response to ensure ID sync
-          const filtered = prev.filter(m => m.id !== tempUserMsg.id);
-          return [...filtered, tempUserMsg, aiResponse];
-        });
-      }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Chat error', err);
-    } finally {
-      setChatLoading(false);
+      // Fail gracefully: display friendly error
+      const errorMsg: Message = {
+        id: `m-err-${Date.now()}`,
+        sender: 'ai',
+        text: err instanceof APIError ? err.message : 'Failed to connect to AI study workspace. Please check your credentials.',
+        timestamp: new Date().toISOString()
+      };
+      setChatMessages(prev => [...prev, errorMsg]);
     }
   };
 
@@ -326,11 +331,7 @@ export default function PaperViewer({ paperId, onBackToLibrary, userId, onSelect
     }));
 
     try {
-      await fetch(`/api/flashcards/${currentCard.id}/difficulty`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ difficulty })
-      });
+      await flashcardsApi.updateDifficulty(currentCard.id, difficulty);
     } catch (err) {
       console.error('Failed to submit card difficulty review', err);
     }
@@ -372,11 +373,7 @@ export default function PaperViewer({ paperId, onBackToLibrary, userId, onSelect
     setQuizSubmitted(true);
 
     try {
-      await fetch(`/api/quizzes/${quiz.id}/score`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ score: scorePct, userId })
-      });
+      await quizApi.submitScore(quiz.id, scorePct, userId);
     } catch (err) {
       console.error('Failed submitting quiz performance', err);
     }
@@ -396,22 +393,16 @@ export default function PaperViewer({ paperId, onBackToLibrary, userId, onSelect
   };
 
   const handleSaveCitation = async (text: string, formatName: string) => {
-    if (!paper) return;
+    if (!paper || !paperId) return;
     try {
-      const res = await fetch('/api/citations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          paperId,
-          paperTitle: paper.title,
-          format: formatName,
-          citationText: text
-        })
+      await citationsApi.save({
+        paperId,
+        paperTitle: paper.title,
+        format: formatName as any,
+        citationText: text
       });
-      if (res.ok) {
-        setCitationSavedAlert(true);
-        setTimeout(() => setCitationSavedAlert(false), 3000);
-      }
+      setCitationSavedAlert(true);
+      setTimeout(() => setCitationSavedAlert(false), 3000);
     } catch (err) {
       console.error(err);
     }
@@ -675,7 +666,8 @@ export default function PaperViewer({ paperId, onBackToLibrary, userId, onSelect
                     {aiSummary && (
                       <button 
                         onClick={() => {
-                          navigator.clipboard.writeText(aiSummary);
+                          const summaryText = typeof aiSummary === 'object' ? JSON.stringify(aiSummary, null, 2) : aiSummary;
+                          navigator.clipboard.writeText(summaryText);
                           alert('Copied to clipboard!');
                         }}
                         className="p-1.5 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-700 transition-colors"
@@ -692,35 +684,44 @@ export default function PaperViewer({ paperId, onBackToLibrary, userId, onSelect
                       Synthesizing executive highlights with Gemini...
                     </div>
                   ) : aiSummary ? (
-                    <div className="text-xs text-slate-750 leading-relaxed space-y-3 whitespace-pre-wrap font-medium">
-                      {aiSummary}
+                    <div className="text-xs text-slate-755 leading-relaxed space-y-4 font-medium">
+                      {typeof aiSummary === 'object' ? (
+                        <>
+                          {aiSummary.coreProblem && (
+                            <div>
+                              <h6 className="font-bold text-slate-900 uppercase tracking-wide text-[10px] mb-1">Core Problem & Hypotheses:</h6>
+                              <p className="text-slate-650 leading-relaxed">{aiSummary.coreProblem}</p>
+                            </div>
+                          )}
+                          {aiSummary.methodology && (
+                            <div>
+                              <h6 className="font-bold text-slate-900 uppercase tracking-wide text-[10px] mb-1">Proposed Methodology & Model:</h6>
+                              <p className="text-slate-650 leading-relaxed">{aiSummary.methodology}</p>
+                            </div>
+                          )}
+                          {aiSummary.findings && (
+                            <div>
+                              <h6 className="font-bold text-slate-900 uppercase tracking-wide text-[10px] mb-1">Key Discoveries & Benchmarks:</h6>
+                              <p className="text-slate-650 leading-relaxed">{aiSummary.findings}</p>
+                            </div>
+                          )}
+                          {aiSummary.limitations && (
+                            <div>
+                              <h6 className="font-bold text-slate-900 uppercase tracking-wide text-[10px] mb-1">Assumptions & Limitations:</h6>
+                              <p className="text-slate-650 leading-relaxed">{aiSummary.limitations}</p>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <p className="whitespace-pre-wrap">{aiSummary}</p>
+                      )}
                     </div>
                   ) : (
                     <div className="text-center py-6 space-y-3">
                       <p className="text-xs text-slate-400">Generate a structured multi-dimensional summary of key hypotheses, models, findings, and limitations.</p>
                       <button 
-                        onClick={async () => {
-                          setAiSummaryLoading(true);
-                          try {
-                            const prompt = "Please summarize this research paper into 4 dense, highly structured sections: 1. Core Problem & Objectives, 2. Proposed Methodology & Model, 3. Experimental Results & Datasets, 4. Research Limitations & Future Work. Keep it dense and scholarly.";
-                            const chatSessionToUse = chatSessionId || 'general';
-                            const res = await fetch(`/api/chats/${chatSessionToUse}/messages`, {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ text: prompt })
-                            });
-                            if (res.ok) {
-                              const data = await res.json();
-                              setAiSummary(data.text);
-                            } else {
-                              // Elegant fallback
-                              setAiSummary(`### 1. Core Problem & Objectives\nThis paper addresses core gaps in existing paradigms by introducing an optimized retrieval-augmented pipeline designed to reduce latency and enhance grounding fidelity.\n\n### 2. Proposed Methodology\nThe authors propose a hybrid semantic-dense retrieval architecture combined with dynamic chunk-weighting. This allows the model to reference precise context windows on-demand.\n\n### 3. Key Findings & Datasets\nEvaluated on comprehensive benchmark datasets, the proposed architecture shows a +14.2% increase in precision and retrieves answers within 180ms on average.\n\n### 4. Limitations & Extensions\nWhile highly accurate, the system relies on structured text page segments and requires larger context sizes for massive multi-document correlations.`);
-                            }
-                          } catch (e) {
-                            console.error(e);
-                          } finally {
-                            setAiSummaryLoading(false);
-                          }
+                        onClick={() => {
+                          if (paperId) loadSummary(paperId);
                         }}
                         className="px-4 py-2 bg-slate-900 hover:bg-blue-600 text-white rounded-xl text-xs font-bold inline-flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
                       >
@@ -771,7 +772,7 @@ export default function PaperViewer({ paperId, onBackToLibrary, userId, onSelect
                       >
                         <div className={`p-4 rounded-2xl max-w-[85%] text-xs leading-relaxed ${
                           msg.sender === 'user' 
-                            ? 'bg-slate-900 text-white font-medium rounded-tr-none' 
+                             ? 'bg-slate-900 text-white font-medium rounded-tr-none' 
                             : 'bg-white border border-slate-200 text-slate-800 rounded-tl-none shadow-sm'
                         }`}>
                           <p className="whitespace-pre-wrap">{msg.text}</p>
@@ -894,35 +895,17 @@ export default function PaperViewer({ paperId, onBackToLibrary, userId, onSelect
                   )}
 
                   <button 
-                    onClick={async () => {
+                    onClick={() => {
                       if (comparePaperIds.length === 0) {
                         setCompareError('Select at least 1 other paper to perform comparative analysis.');
                         return;
                       }
                       setCompareError('');
-                      setCompareLoading(true);
-                      try {
-                        const res = await fetch('/api/reviews', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            title: `Comparative Matrix - ${paper.title.substring(0, 20)}`,
-                            paperIds: [paper.id, ...comparePaperIds],
-                            userId
-                          })
-                        });
-                        if (res.ok) {
-                          const newReview = await res.json();
-                          setSelectedReview(newReview);
-                        } else {
-                          const errData = await res.json();
-                          setCompareError(errData.error || 'Failed to generate review.');
-                        }
-                      } catch (err) {
-                        setCompareError('Network error connecting to synthesis engine.');
-                      } finally {
-                        setCompareLoading(false);
-                      }
+                      generateReview({
+                        title: `Comparative Matrix - ${paper.title.substring(0, 20)}`,
+                        paperIds: [paper.id, ...comparePaperIds],
+                        userId
+                      });
                     }}
                     disabled={compareLoading}
                     className="w-full py-2.5 bg-slate-900 hover:bg-blue-600 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer"
@@ -958,7 +941,7 @@ export default function PaperViewer({ paperId, onBackToLibrary, userId, onSelect
                           <thead>
                             <tr className="bg-slate-50 text-slate-500 font-bold border-b border-slate-100">
                               <th className="p-2 border-r border-slate-100 min-w-[100px]">Dimension</th>
-                              {selectedReview.papers?.map((pId) => {
+                              {selectedReview.paperIds?.map((pId) => {
                                 const paperDetails = allPapers.find(ap => ap.id === pId) || (pId === paper.id ? paper : null);
                                 return (
                                   <th key={pId} className="p-2 border-r border-slate-100 last:border-r-0 max-w-[120px] truncate" title={paperDetails?.title}>
@@ -972,7 +955,7 @@ export default function PaperViewer({ paperId, onBackToLibrary, userId, onSelect
                             {selectedReview.synthesisTable?.map((row, rIdx) => (
                               <tr key={rIdx} className="border-b border-slate-100 last:border-b-0 hover:bg-slate-50/50">
                                 <td className="p-2 font-bold text-slate-700 bg-slate-50/20 border-r border-slate-100">{row.heading}</td>
-                                {selectedReview.papers?.map((pId) => (
+                                {selectedReview.paperIds?.map((pId) => (
                                   <td key={pId} className="p-2 text-slate-600 border-r border-slate-100 last:border-r-0 leading-relaxed font-medium">
                                     {row.values?.[pId] || 'Not discussed.'}
                                   </td>
@@ -1308,7 +1291,7 @@ export default function PaperViewer({ paperId, onBackToLibrary, userId, onSelect
                           
                           {/* Save to library */}
                           <button
-                            onClick={() => handleSaveCitation(style.text, style.id as any)}
+                            onClick={() => handleSaveCitation(style.text, style.id)}
                             className="px-2 py-1 bg-slate-50 hover:bg-blue-50 hover:text-blue-700 text-slate-600 border border-slate-100 rounded text-[10px] font-bold flex items-center gap-1 transition-all"
                             id={`save_cit_${style.id}`}
                           >
@@ -1355,12 +1338,10 @@ export default function PaperViewer({ paperId, onBackToLibrary, userId, onSelect
                           
                           // Simplified grid positioning coordinates for beautiful aesthetic spacing
                           const getCoords = (nodeId: string) => {
-                            // Map nodes to coordinates
                             const index = mindmapData.nodes.findIndex(n => n.id === nodeId);
                             const count = mindmapData.nodes.length;
-                            if (nodeId === 'n-title' || index === 0) return { x: 200, y: 120 }; // Centered title node
+                            if (nodeId === 'n-title' || index === 0) return { x: 200, y: 120 };
                             
-                            // Distribute others radially
                             const angle = ((index - 1) * (2 * Math.PI)) / (count - 1);
                             const r = 90;
                             return {
@@ -1387,7 +1368,7 @@ export default function PaperViewer({ paperId, onBackToLibrary, userId, onSelect
                         })}
 
                         {/* Render Nodes */}
-                        {mindmapData.nodes.map((node, idx) => {
+                        {mindmapData.nodes.map((node) => {
                           const index = mindmapData.nodes.findIndex(n => n.id === node.id);
                           const count = mindmapData.nodes.length;
                           let coords = { x: 200, y: 120 };
@@ -1401,11 +1382,11 @@ export default function PaperViewer({ paperId, onBackToLibrary, userId, onSelect
                           }
 
                           const isSelected = selectedMindmapNode?.id === node.id;
-                          let fill = '#94A3B8'; // Slate
-                          if (node.group === 'title') fill = '#2563EB'; // Blue
-                          if (node.group === 'concept') fill = '#10B981'; // Green
-                          if (node.group === 'method') fill = '#F59E0B'; // Amber
-                          if (node.group === 'finding') fill = '#8B5CF6'; // Purple
+                          let fill = '#94A3B8';
+                          if (node.group === 'title') fill = '#2563EB';
+                          if (node.group === 'concept') fill = '#10B981';
+                          if (node.group === 'method') fill = '#F59E0B';
+                          if (node.group === 'finding') fill = '#8B5CF6';
 
                           return (
                             <g 
@@ -1463,7 +1444,7 @@ export default function PaperViewer({ paperId, onBackToLibrary, userId, onSelect
                 )}
 
                 <div className="text-[10px] text-slate-400 font-mono text-center">
-                  Visual mapping nodes can be selected individually to unpack details.
+                  Review statistics are stored permanently inside your study profile.
                 </div>
               </div>
             )}
