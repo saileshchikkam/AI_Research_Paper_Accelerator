@@ -2,6 +2,7 @@ import mongoose, { Schema } from 'mongoose';
 
 export interface IStudyActivity {
   _id: string;
+  userId: string;
   type: 'read' | 'chat' | 'quiz' | 'flashcard' | 'note';
   paperTitle: string;
   paperId?: string;
@@ -12,6 +13,7 @@ export interface IStudyActivity {
 const StudyActivitySchema = new Schema<IStudyActivity>(
   {
     _id: { type: String, required: true },
+    userId: { type: String, required: true },
     type: { 
       type: String, 
       enum: ['read', 'chat', 'quiz', 'flashcard', 'note'], 
@@ -45,6 +47,6 @@ const StudyActivitySchema = new Schema<IStudyActivity>(
   }
 );
 
-StudyActivitySchema.index({ timestamp: -1 });
+StudyActivitySchema.index({ userId: 1, timestamp: -1 });
 
 export const StudyActivityModel = mongoose.model<IStudyActivity>('StudyActivity', StudyActivitySchema);

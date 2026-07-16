@@ -2,6 +2,7 @@ import mongoose, { Schema } from 'mongoose';
 
 export interface INote {
   _id: string;
+  userId: string;
   paperId: string;
   title: string;
   content: string;
@@ -11,6 +12,7 @@ export interface INote {
 const NoteSchema = new Schema<INote>(
   {
     _id: { type: String, required: true },
+    userId: { type: String, required: true },
     paperId: { type: String, required: true },
     title: { type: String, required: true },
     content: { type: String, default: '' },
@@ -39,6 +41,7 @@ const NoteSchema = new Schema<INote>(
   }
 );
 
+NoteSchema.index({ userId: 1 });
 NoteSchema.index({ paperId: 1 });
 
 export const NoteModel = mongoose.model<INote>('Note', NoteSchema);

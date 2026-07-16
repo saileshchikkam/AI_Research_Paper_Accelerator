@@ -7,6 +7,7 @@ export interface ISynthesisTableItem {
 
 export interface ILiteratureReview {
   _id: string;
+  userId: string;
   title: string;
   papers: string[];
   synthesisTable: ISynthesisTableItem[];
@@ -23,6 +24,7 @@ const SynthesisTableItemSchema = new Schema<ISynthesisTableItem>({
 const LiteratureReviewSchema = new Schema<ILiteratureReview>(
   {
     _id: { type: String, required: true },
+    userId: { type: String, required: true },
     title: { type: String, required: true },
     papers: { type: [String], default: [] },
     synthesisTable: { type: [SynthesisTableItemSchema], default: [] },
@@ -52,5 +54,7 @@ const LiteratureReviewSchema = new Schema<ILiteratureReview>(
     }
   }
 );
+
+LiteratureReviewSchema.index({ userId: 1 });
 
 export const LiteratureReviewModel = mongoose.model<ILiteratureReview>('LiteratureReview', LiteratureReviewSchema);

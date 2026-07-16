@@ -14,6 +14,7 @@ export interface User {
 
 export interface Paper {
   id: string;
+  userId?: string;
   title: string;
   authors: string;
   journal: string;
@@ -46,6 +47,7 @@ export interface Folder {
   name: string;
   description: string;
   color: string; // Tailwind hex or class representation
+  userId: string;
   createdAt: string;
 }
 
@@ -65,6 +67,7 @@ export interface Message {
 
 export interface ChatSession {
   id: string;
+  userId?: string;
   paperId: string | 'all'; // 'all' for comparative chat
   title: string;
   lastMessageAt: string;
@@ -73,6 +76,7 @@ export interface ChatSession {
 
 export interface Note {
   id: string;
+  userId?: string;
   paperId: string;
   title: string;
   content: string;
@@ -81,6 +85,7 @@ export interface Note {
 
 export interface Flashcard {
   id: string;
+  userId?: string;
   paperId: string;
   question: string;
   answer: string;
@@ -98,6 +103,7 @@ export interface QuizQuestion {
 
 export interface Quiz {
   id: string;
+  userId?: string;
   paperId: string;
   title: string;
   questions: QuizQuestion[];
@@ -107,6 +113,7 @@ export interface Quiz {
 
 export interface LiteratureReview {
   id: string;
+  userId?: string;
   title: string;
   papers: string[]; // Paper IDs
   synthesisTable: {
@@ -120,6 +127,7 @@ export interface LiteratureReview {
 
 export interface SavedCitation {
   id: string;
+  userId?: string;
   paperId: string;
   paperTitle: string;
   format: 'apa' | 'mla' | 'chicago' | 'harvard' | 'bibtex';
@@ -129,6 +137,7 @@ export interface SavedCitation {
 
 export interface StudyActivity {
   id: string;
+  userId: string;
   type: 'read' | 'chat' | 'quiz' | 'flashcard' | 'note';
   paperTitle: string;
   paperId?: string;
