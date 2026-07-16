@@ -350,12 +350,12 @@ app.put('/api/auth/profile', authenticate, async (req: AuthRequest, res: Respons
 });
 
 // Folder Endpoints
-app.get('/api/folders', async (req: Request, res: Response) => {
-  res.json(await db.getFolders());
+app.get('/api/folders', authenticate, async (req: AuthRequest, res: Response) => {
+  res.json(await db.getFolders(req.userId!));
 });
 
-app.post('/api/folders', async (req: Request, res: Response) => {
-  const { name, description, color, userId } = req.body;
+app.post('/api/folders', authenticate, async (req: AuthRequest, res: Response) => {
+  const { name, description, color } = req.body;
   if (!name) {
     return res.status(400).json({ error: 'Folder name is required' });
   }
@@ -364,24 +364,24 @@ app.post('/api/folders', async (req: Request, res: Response) => {
     name,
     description: description || '',
     color: color || '#3B82F6',
-    userId: userId || 'u-1',
+    userId: req.userId!,
     createdAt: new Date().toISOString()
   });
   res.json(folder);
 });
 
-app.delete('/api/folders/:id', async (req: Request, res: Response) => {
-  await db.deleteFolder(req.params.id);
+app.delete('/api/folders/:id', authenticate, async (req: AuthRequest, res: Response) => {
+  await db.deleteFolder(req.userId!, req.params.id);
   res.json({ success: true });
 });
 
 // Paper/Document Endpoints
-app.get('/api/papers', async (req: Request, res: Response) => {
-  res.json(await db.getPapers());
+app.get('/api/papers', authenticate, async (req: AuthRequest, res: Response) => {
+  res.json(await db.getPapers(req.userId!));
 });
 
-app.post('/api/papers', async (req: Request, res: Response) => {
-  const { title, authors, journal, year, folderId, fileType, size, rawContent, userId } = req.body;
+app.post('/api/papers', authenticate, async (req: AuthRequest, res: Response) => {
+  const { title, authors, journal, year, folderId, fileType, size, rawContent } = req.body;
   if (!title) {
     return res.status(400).json({ error: 'Paper title is required' });
   }
@@ -583,6 +583,7 @@ Future investigations will explore the applicability of this system to multi-mod
 
   const newPaper: Paper = {
     id: `p-${Date.now()}`,
+    userId: req.userId!,
     title,
     authors: cleanAuthors,
     journal: cleanJournal,
@@ -606,7 +607,7 @@ Future investigations will explore the applicability of this system to multi-mod
   
   // Log Activity
   await db.addActivity({
-    userId: userId || 'u-1',
+    userId: req.userId!,
     type: 'read',
     paperTitle: title,
     paperId: newPaper.id,
@@ -616,34 +617,41 @@ Future investigations will explore the applicability of this system to multi-mod
   res.json(newPaper);
 });
 
-app.put('/api/papers/:id', async (req: Request, res: Response) => {
-  const updated = await db.updatePaper(req.params.id, req.body);
+app.put('/api/papers/:id', authenticate, async (req: AuthRequest, res: Response) => {
+  const updated = await db.updatePaper(req.userId!, req.params.id, req.body);
   if (!updated) {
     return res.status(404).json({ error: 'Paper not found' });
   }
   res.json(updated);
 });
 
-app.delete('/api/papers/:id', async (req: Request, res: Response) => {
-  await db.deletePaper(req.params.id);
+app.delete('/api/papers/:id', authenticate, async (req: AuthRequest, res: Response) => {
+  await db.deletePaper(req.userId!, req.params.id);
   res.json({ success: true });
 });
 
 // Note Endpoints
-app.get('/api/papers/:id/notes', async (req: Request, res: Response) => {
-  const note = await db.getNoteForPaper(req.params.id);
+app.get('/api/papers/:id/notes', authenticate, async (req: AuthRequest, res: Response) => {
+  const paper = await db.getPaper(req.userId!, req.params.id);
+  if (!paper) {
+    return res.status(404).json({ error: 'Paper not found' });
+  }
+  const note = await db.getNoteForPaper(req.userId!, req.params.id);
   res.json(note || { content: '', title: '' });
 });
 
-app.post('/api/papers/:id/notes', async (req: Request, res: Response) => {
-  const { title, content, userId } = req.body;
-  const note = await db.createOrUpdateNote(req.params.id, title || 'Study Notes', content || '');
+app.post('/api/papers/:id/notes', authenticate, async (req: AuthRequest, res: Response) => {
+  const paper = await db.getPaper(req.userId!, req.params.id);
+  if (!paper) {
+    return res.status(404).json({ error: 'Paper not found' });
+  }
+  const { title, content } = req.body;
+  const note = await db.createOrUpdateNote(req.userId!, req.params.id, title || 'Study Notes', content || '');
   
-  const paper = await db.getPaper(req.params.id);
   await db.addActivity({
-    userId: userId || 'u-1',
+    userId: req.userId!,
     type: 'note',
-    paperTitle: paper ? paper.title : 'Research Paper',
+    paperTitle: paper.title,
     paperId: req.params.id,
     detail: `Updated notes for paper.`
   });
@@ -652,17 +660,17 @@ app.post('/api/papers/:id/notes', async (req: Request, res: Response) => {
 });
 
 // Flashcards Endpoints (Uses Gemini to automatically generate flashcards if not present)
-app.get('/api/papers/:id/flashcards', async (req: Request, res: Response) => {
+app.get('/api/papers/:id/flashcards', authenticate, async (req: AuthRequest, res: Response) => {
   const paperId = req.params.id;
-  let cards = await db.getFlashcards(paperId);
+  const paper = await db.getPaper(req.userId!, paperId);
+  if (!paper) {
+    return res.status(404).json({ error: 'Paper not found' });
+  }
+
+  let cards = await db.getFlashcards(req.userId!, paperId);
 
   // If no flashcards exist yet, trigger Gemini to generate them!
   if (cards.length === 0) {
-    const paper = await db.getPaper(paperId);
-    if (!paper) {
-      return res.status(404).json({ error: 'Paper not found' });
-    }
-
     try {
       const doc = {
         title: paper.title,
@@ -677,6 +685,7 @@ app.get('/api/papers/:id/flashcards', async (req: Request, res: Response) => {
       const result = await AIService.execute(doc, 'flashcards');
       const generated: Flashcard[] = result.map((card: any, idx: number) => ({
         id: `fc-${Date.now()}-${idx}`,
+        userId: req.userId!,
         paperId,
         question: card.question,
         answer: card.answer,
@@ -684,15 +693,16 @@ app.get('/api/papers/:id/flashcards', async (req: Request, res: Response) => {
       }));
 
       if (generated.length > 0) {
-        await db.saveFlashcards(generated);
+        await db.saveFlashcards(req.userId!, generated);
         cards = generated;
       }
     } catch (err: any) {
       console.error('Error generating flashcards with Gemini, falling back to static generation', err.message);
       // Fallback static cards
-      const fallback = [
+      const fallback: Flashcard[] = [
         {
           id: `fc-f1-${Date.now()}`,
+          userId: req.userId!,
           paperId,
           question: `What is the core focus of the paper "${paper.title}"?`,
           answer: `The paper outlines key contributions regarding ${paper.abstract.substring(0, 150)}...`,
@@ -700,13 +710,14 @@ app.get('/api/papers/:id/flashcards', async (req: Request, res: Response) => {
         },
         {
           id: `fc-f2-${Date.now()}`,
+          userId: req.userId!,
           paperId,
           question: `Who are the main authors of "${paper.title}"?`,
           answer: `The paper was published in ${paper.year} by ${paper.authors}.`,
           difficulty: null
         }
       ];
-      await db.saveFlashcards(fallback);
+      await db.saveFlashcards(req.userId!, fallback);
       cards = fallback;
     }
   }
@@ -714,9 +725,9 @@ app.get('/api/papers/:id/flashcards', async (req: Request, res: Response) => {
   res.json(cards);
 });
 
-app.put('/api/flashcards/:cardId/difficulty', async (req: Request, res: Response) => {
+app.put('/api/flashcards/:cardId/difficulty', authenticate, async (req: AuthRequest, res: Response) => {
   const { difficulty } = req.body;
-  const card = await db.updateFlashcardDifficulty(req.params.cardId, difficulty);
+  const card = await db.updateFlashcardDifficulty(req.userId!, req.params.cardId, difficulty);
   if (!card) {
     return res.status(404).json({ error: 'Flashcard not found' });
   }
@@ -724,17 +735,17 @@ app.put('/api/flashcards/:cardId/difficulty', async (req: Request, res: Response
 });
 
 // Quiz Endpoints (Uses Gemini to automatically generate a structured quiz if not present)
-app.get('/api/papers/:id/quiz', async (req: Request, res: Response) => {
+app.get('/api/papers/:id/quiz', authenticate, async (req: AuthRequest, res: Response) => {
   const paperId = req.params.id;
-  let quizzes = await db.getQuizzes(paperId);
+  const paper = await db.getPaper(req.userId!, paperId);
+  if (!paper) {
+    return res.status(404).json({ error: 'Paper not found' });
+  }
+
+  let quizzes = await db.getQuizzes(req.userId!, paperId);
 
   // If no quizzes exist, generate one with Gemini!
   if (quizzes.length === 0) {
-    const paper = await db.getPaper(paperId);
-    if (!paper) {
-      return res.status(404).json({ error: 'Paper not found' });
-    }
-
     try {
       const doc = {
         title: paper.title,
@@ -749,13 +760,14 @@ app.get('/api/papers/:id/quiz', async (req: Request, res: Response) => {
       const parsed = await AIService.execute(doc, 'quiz');
       const generatedQuiz: Quiz = {
         id: `q-${Date.now()}`,
+        userId: req.userId!,
         paperId,
         title: parsed.title || `${paper.title} Study Assessment`,
         questions: parsed.questions || []
       };
 
       if (generatedQuiz.questions.length > 0) {
-        await db.saveQuiz(generatedQuiz);
+        await db.saveQuiz(req.userId!, generatedQuiz);
         quizzes = [generatedQuiz];
       }
     } catch (err: any) {
@@ -763,6 +775,7 @@ app.get('/api/papers/:id/quiz', async (req: Request, res: Response) => {
       // Fallback static quiz
       const fallbackQuiz: Quiz = {
         id: `q-f-${Date.now()}`,
+        userId: req.userId!,
         paperId,
         title: `${paper.title} Core Concepts Assessment`,
         questions: [
@@ -790,7 +803,7 @@ app.get('/api/papers/:id/quiz', async (req: Request, res: Response) => {
           }
         ]
       };
-      await db.saveQuiz(fallbackQuiz);
+      await db.saveQuiz(req.userId!, fallbackQuiz);
       quizzes = [fallbackQuiz];
     }
   }
@@ -798,16 +811,16 @@ app.get('/api/papers/:id/quiz', async (req: Request, res: Response) => {
   res.json(quizzes);
 });
 
-app.put('/api/quizzes/:quizId/score', async (req: Request, res: Response) => {
-  const { score, userId } = req.body;
-  const quiz = await db.submitQuizScore(req.params.quizId, score);
+app.put('/api/quizzes/:quizId/score', authenticate, async (req: AuthRequest, res: Response) => {
+  const { score } = req.body;
+  const quiz = await db.submitQuizScore(req.userId!, req.params.quizId, score);
   if (!quiz) {
     return res.status(404).json({ error: 'Quiz not found' });
   }
 
-  const paper = await db.getPaper(quiz.paperId);
+  const paper = await db.getPaper(req.userId!, quiz.paperId);
   await db.addActivity({
-    userId: userId || 'u-1',
+    userId: req.userId!,
     type: 'quiz',
     paperTitle: paper ? paper.title : 'Research Paper',
     paperId: quiz.paperId,
@@ -818,9 +831,9 @@ app.put('/api/quizzes/:quizId/score', async (req: Request, res: Response) => {
 });
 
 // Mindmap Endpoints (Uses Gemini to extract conceptual nodes & relationships)
-app.get('/api/papers/:id/mindmap', async (req: Request, res: Response) => {
+app.get('/api/papers/:id/mindmap', authenticate, async (req: AuthRequest, res: Response) => {
   const paperId = req.params.id;
-  const paper = await db.getPaper(paperId);
+  const paper = await db.getPaper(req.userId!, paperId);
   if (!paper) {
     return res.status(404).json({ error: 'Paper not found' });
   }
@@ -863,18 +876,25 @@ app.get('/api/papers/:id/mindmap', async (req: Request, res: Response) => {
 });
 
 // RAG / AI Chat Endpoints
-app.get('/api/chats', async (req: Request, res: Response) => {
+app.get('/api/chats', authenticate, async (req: AuthRequest, res: Response) => {
   const paperId = req.query.paperId as string;
-  res.json(await db.getChats(paperId));
+  res.json(await db.getChats(req.userId!, paperId));
 });
 
-app.post('/api/chats', async (req: Request, res: Response) => {
+app.post('/api/chats', authenticate, async (req: AuthRequest, res: Response) => {
   const { paperId, title } = req.body;
   if (!paperId) {
     return res.status(400).json({ error: 'paperId is required' });
   }
+  if (paperId !== 'all') {
+    const paper = await db.getPaper(req.userId!, paperId);
+    if (!paper) {
+      return res.status(404).json({ error: 'Paper not found or access denied.' });
+    }
+  }
   const session: ChatSession = {
     id: `c-${Date.now()}`,
+    userId: req.userId!,
     paperId,
     title: title || 'New AI Discussion',
     lastMessageAt: new Date().toISOString(),
@@ -885,11 +905,11 @@ app.post('/api/chats', async (req: Request, res: Response) => {
 });
 
 // Adding a message to a chat session, which executes the actual Retrieval-Augmented Generation (RAG)!
-app.post('/api/chats/:id/messages', async (req: Request, res: Response) => {
-  const { text, sender, userId } = req.body;
+app.post('/api/chats/:id/messages', authenticate, async (req: AuthRequest, res: Response) => {
+  const { text, sender } = req.body;
   const chatId = req.params.id;
 
-  const chat = await db.getChat(chatId);
+  const chat = await db.getChat(req.userId!, chatId);
   if (!chat) {
     return res.status(404).json({ error: 'Chat session not found' });
   }
@@ -902,16 +922,16 @@ app.post('/api/chats/:id/messages', async (req: Request, res: Response) => {
     timestamp: new Date().toISOString()
   };
   const updatedMessages = [...chat.messages, userMsg];
-  await db.saveChatMessages(chatId, updatedMessages);
+  await db.saveChatMessages(req.userId!, chatId, updatedMessages);
 
   // 2. Add Activity
   let activePaperTitle = 'Multi-Paper Synthesis';
   if (chat.paperId !== 'all') {
-    const p = await db.getPaper(chat.paperId);
+    const p = await db.getPaper(req.userId!, chat.paperId);
     if (p) activePaperTitle = p.title;
   }
   await db.addActivity({
-    userId: userId || 'u-1',
+    userId: req.userId!,
     type: 'chat',
     paperTitle: activePaperTitle,
     paperId: chat.paperId === 'all' ? undefined : chat.paperId,
@@ -920,10 +940,10 @@ app.post('/api/chats/:id/messages', async (req: Request, res: Response) => {
 
   // 3. Trigger Gemini RAG response!
   try {
-    const aiConfig = await db.getAiConfig();
+    const aiConfig = await db.getAiConfig(req.userId!);
 
     if (chat.paperId === 'all') {
-      const papers = await db.getPapers();
+      const papers = await db.getPapers(req.userId!);
       const allChunks = papers.flatMap(p => {
         const pChunks = p.chunks || DocumentProcessor.chunkDocument(p.content);
         return pChunks.map(c => ({
@@ -952,10 +972,10 @@ app.post('/api/chats/:id/messages', async (req: Request, res: Response) => {
       };
 
       const finalMessages = [...updatedMessages, aiMsg];
-      await db.saveChatMessages(chatId, finalMessages);
+      await db.saveChatMessages(req.userId!, chatId, finalMessages);
       return res.json(aiMsg);
     } else {
-      const paper = await db.getPaper(chat.paperId);
+      const paper = await db.getPaper(req.userId!, chat.paperId);
       if (!paper) {
         throw new Error('Paper not found');
       }
@@ -980,7 +1000,7 @@ app.post('/api/chats/:id/messages', async (req: Request, res: Response) => {
       };
 
       const finalMessages = [...updatedMessages, aiMsg];
-      await db.saveChatMessages(chatId, finalMessages);
+      await db.saveChatMessages(req.userId!, chatId, finalMessages);
       return res.json(aiMsg);
     }
   } catch (err: any) {
@@ -990,17 +1010,17 @@ app.post('/api/chats/:id/messages', async (req: Request, res: Response) => {
 });
 
 // Literature Review / Multi-paper comparison creator
-app.get('/api/reviews', async (req: Request, res: Response) => {
-  res.json(await db.getLiteratureReviews());
+app.get('/api/reviews', authenticate, async (req: AuthRequest, res: Response) => {
+  res.json(await db.getLiteratureReviews(req.userId!));
 });
 
-app.post('/api/reviews', async (req: Request, res: Response) => {
-  const { title, paperIds, userId } = req.body;
+app.post('/api/reviews', authenticate, async (req: AuthRequest, res: Response) => {
+  const { title, paperIds } = req.body;
   if (!paperIds || !Array.isArray(paperIds) || paperIds.length === 0) {
     return res.status(400).json({ error: 'Please select at least one paper for comparison' });
   }
 
-  const papers = (await db.getPapers()).filter(p => paperIds.includes(p.id));
+  const papers = (await db.getPapers(req.userId!)).filter(p => paperIds.includes(p.id));
   if (papers.length === 0) {
     return res.status(400).json({ error: 'Selected papers not found in library' });
   }
@@ -1082,6 +1102,7 @@ app.post('/api/reviews', async (req: Request, res: Response) => {
     
     const review: LiteratureReview = {
       id: `lr-${Date.now()}`,
+      userId: req.userId!,
       title: title || parsed.title || 'Synthesized Literature Review',
       papers: paperIds,
       synthesisTable: parsed.synthesisTable || [],
@@ -1093,7 +1114,7 @@ app.post('/api/reviews', async (req: Request, res: Response) => {
     await db.createLiteratureReview(review);
 
     await db.addActivity({
-      userId: userId || 'u-1',
+      userId: req.userId!,
       type: 'read',
       paperTitle: 'Synthesis Studio',
       detail: `Synthesized a new Literature Review: "${review.title}" comparing ${papers.length} papers.`
@@ -1189,6 +1210,7 @@ app.post('/api/reviews', async (req: Request, res: Response) => {
 
     const review: LiteratureReview = {
       id: `lr-f-${Date.now()}`,
+      userId: req.userId!,
       title: title || `Synthesized Review on ${papers[0]?.title.substring(0, 20)}...`,
       papers: paperIds,
       synthesisTable,
@@ -1202,23 +1224,28 @@ app.post('/api/reviews', async (req: Request, res: Response) => {
   }
 });
 
-app.delete('/api/reviews/:id', async (req: Request, res: Response) => {
-  await db.deleteLiteratureReview(req.params.id);
+app.delete('/api/reviews/:id', authenticate, async (req: AuthRequest, res: Response) => {
+  await db.deleteLiteratureReview(req.userId!, req.params.id);
   res.json({ success: true });
 });
 
 // Citations Saved
-app.get('/api/citations', async (req: Request, res: Response) => {
-  res.json(await db.getSavedCitations());
+app.get('/api/citations', authenticate, async (req: AuthRequest, res: Response) => {
+  res.json(await db.getSavedCitations(req.userId!));
 });
 
-app.post('/api/citations', async (req: Request, res: Response) => {
+app.post('/api/citations', authenticate, async (req: AuthRequest, res: Response) => {
   const { paperId, paperTitle, format, citationText } = req.body;
   if (!paperId || !citationText) {
     return res.status(400).json({ error: 'paperId and citationText are required' });
   }
+  const paper = await db.getPaper(req.userId!, paperId);
+  if (!paper) {
+    return res.status(404).json({ error: 'Paper not found or access denied.' });
+  }
   const saved = await db.saveCitation({
     id: `sc-${Date.now()}`,
+    userId: req.userId!,
     paperId,
     paperTitle: paperTitle || 'Untitled Paper',
     format: format || 'apa',
@@ -1228,19 +1255,19 @@ app.post('/api/citations', async (req: Request, res: Response) => {
   res.json(saved);
 });
 
-app.delete('/api/citations/:id', async (req: Request, res: Response) => {
-  await db.deleteSavedCitation(req.params.id);
+app.delete('/api/citations/:id', authenticate, async (req: AuthRequest, res: Response) => {
+  await db.deleteSavedCitation(req.userId!, req.params.id);
   res.json({ success: true });
 });
 
 // Metrics Endpoint
-app.get('/api/metrics', async (req: Request, res: Response) => {
-  res.json(await db.getMetrics());
+app.get('/api/metrics', authenticate, async (req: AuthRequest, res: Response) => {
+  res.json(await db.getMetrics(req.userId!));
 });
 
 // Activity Logs
-app.get('/api/activities', async (req: Request, res: Response) => {
-  res.json(await db.getActivities());
+app.get('/api/activities', authenticate, async (req: AuthRequest, res: Response) => {
+  res.json(await db.getActivities(req.userId!));
 });
 
 // Static Help Suggestions
@@ -1264,19 +1291,19 @@ app.get('/api/help', async (req: Request, res: Response) => {
 });
 
 // AI Configuration Endpoints
-app.get('/api/ai-config', async (req: Request, res: Response) => {
+app.get('/api/ai-config', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const config = await db.getAiConfig();
+    const config = await db.getAiConfig(req.userId!);
     res.json(config);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.post('/api/ai-config', async (req: Request, res: Response) => {
+app.post('/api/ai-config', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { temperature, chunkSize, persona } = req.body;
-    await db.saveAiConfig({ temperature, chunkSize, persona });
+    await db.saveAiConfig(req.userId!, { temperature, chunkSize, persona });
     res.json({ success: true, message: 'AI configuration updated successfully' });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

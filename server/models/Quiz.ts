@@ -9,6 +9,7 @@ export interface IQuizQuestion {
 
 export interface IQuiz {
   _id: string;
+  userId: string;
   paperId: string;
   title: string;
   questions: IQuizQuestion[];
@@ -26,6 +27,7 @@ const QuizQuestionSchema = new Schema<IQuizQuestion>({
 const QuizSchema = new Schema<IQuiz>(
   {
     _id: { type: String, required: true },
+    userId: { type: String, required: true },
     paperId: { type: String, required: true },
     title: { type: String, required: true },
     questions: { type: [QuizQuestionSchema], default: [] },
@@ -55,6 +57,7 @@ const QuizSchema = new Schema<IQuiz>(
   }
 );
 
+QuizSchema.index({ userId: 1 });
 QuizSchema.index({ paperId: 1 });
 
 export const QuizModel = mongoose.model<IQuiz>('Quiz', QuizSchema);

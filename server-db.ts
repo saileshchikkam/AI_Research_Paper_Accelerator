@@ -991,66 +991,17 @@ class ServerDatabase {
     // Seeding is now explicitly called on server startup after a successful connection (Task 2).
   }
 
-  // Seeding helper for MongoDB
+  // Seeding helper for MongoDB - ONLY seed users if collection is empty, DO NOT seed papers/folders/activities/etc. to guarantee empty starting state for all users.
   async seedMongoDBIfNeeded() {
     try {
       const userCount = await UserModel.countDocuments();
-      
-      // Upgrade Migration for existing datasets
-      if (userCount > 0) {
-        const p1 = await PaperModel.findById('p-1');
-        if (p1 && (!p1.pages || p1.pages.length < 10 || !p1.summary)) {
-          console.log("Upgrading existing database to high-fidelity 13-page text, summaries, insights, and full flashcards/quizzes...");
-          await PaperModel.deleteMany({ _id: { $in: ['p-1', 'p-2', 'p-3'] } });
-          await FlashcardModel.deleteMany({ paperId: { $in: ['p-1', 'p-2', 'p-3'] } });
-          await QuizModel.deleteMany({ paperId: { $in: ['p-1', 'p-2', 'p-3'] } });
-          
-          for (const p of INITIAL_PAPERS) {
-            await PaperModel.create({ _id: p.id, ...p });
-          }
-          for (const fc of INITIAL_FLASHCARDS) {
-            await FlashcardModel.create({ _id: fc.id, ...fc });
-          }
-          for (const q of INITIAL_QUIZZES) {
-            await QuizModel.create({ _id: q.id, ...q });
-          }
-          console.log("Database upgrade migration completed successfully.");
-        }
-      }
-
       if (userCount === 0) {
-        console.log("MongoDB collection 'users' is empty. Performing full seeding...");
-        
+        console.log("MongoDB collection 'users' is empty. Seeding initial user profiles...");
         for (const u of INITIAL_USERS) {
           // Set password as 'password' which gets hashed automatically via pre-save hook
           await UserModel.create({ _id: u.id, password: 'password', ...u });
         }
-        for (const f of INITIAL_FOLDERS) {
-          await FolderModel.create({ _id: f.id, ...f });
-        }
-        for (const p of INITIAL_PAPERS) {
-          await PaperModel.create({ _id: p.id, ...p });
-        }
-        for (const n of INITIAL_NOTES) {
-          await NoteModel.create({ _id: n.id, ...n });
-        }
-        for (const fc of INITIAL_FLASHCARDS) {
-          await FlashcardModel.create({ _id: fc.id, ...fc });
-        }
-        for (const q of INITIAL_QUIZZES) {
-          await QuizModel.create({ _id: q.id, ...q });
-        }
-        for (const lr of INITIAL_LITERATURE_REVIEWS) {
-          await LiteratureReviewModel.create({ _id: lr.id, ...lr });
-        }
-        for (const sc of INITIAL_SAVED_CITATIONS) {
-          await SavedCitationModel.create({ _id: sc.id, ...sc });
-        }
-        for (const sa of INITIAL_STUDY_ACTIVITIES) {
-          await StudyActivityModel.create({ _id: sa.id, ...sa });
-        }
-        
-        console.log("MongoDB Atlas database seeded successfully.");
+        console.log("MongoDB users seeded successfully. Default workspace state is pristine and empty.");
       }
     } catch (err: any) {
       console.error("MongoDB Atlas Seeding failed:", err.message || err);
@@ -1075,8 +1026,8 @@ class ServerDatabase {
   }
 
   // Folder Operations
-  async getFolders(): Promise<Folder[]> {
-    const docs = await FolderModel.find({}).lean();
+  async getFolders(userId: string): Promise<Folder[]> {
+    const docs = await FolderModel.find({ userId }).lean();
     return docs.map(d => ({ ...d, id: d._id }) as any);
   }
 
@@ -1085,20 +1036,20 @@ class ServerDatabase {
     return doc.toJSON() as any;
   }
 
-  async deleteFolder(id: string): Promise<void> {
-    await FolderModel.deleteOne({ _id: id });
-    // Update all papers that were in this folder
-    await PaperModel.updateMany({ folderId: id }, { folderId: null });
+  async deleteFolder(userId: string, id: string): Promise<void> {
+    await FolderModel.deleteOne({ _id: id, userId });
+    // Update all papers that were in this folder and owned by this user
+    await PaperModel.updateMany({ folderId: id, userId }, { folderId: null });
   }
 
   // Paper Operations
-  async getPapers(): Promise<Paper[]> {
-    const docs = await PaperModel.find({}).lean();
+  async getPapers(userId: string): Promise<Paper[]> {
+    const docs = await PaperModel.find({ userId }).lean();
     return docs.map(d => ({ ...d, id: d._id }) as any);
   }
 
-  async getPaper(id: string): Promise<Paper | undefined> {
-    const doc = await PaperModel.findById(id).lean();
+  async getPaper(userId: string, id: string): Promise<Paper | undefined> {
+    const doc = await PaperModel.findOne({ _id: id, userId }).lean();
     if (!doc) return undefined;
     return { ...doc, id: doc._id } as any;
   }
@@ -1108,36 +1059,39 @@ class ServerDatabase {
     return doc.toJSON() as any;
   }
 
-  async updatePaper(id: string, updates: Partial<Paper>): Promise<Paper | undefined> {
-    const doc = await PaperModel.findByIdAndUpdate(id, updates, { new: true }).lean();
+  async updatePaper(userId: string, id: string, updates: Partial<Paper>): Promise<Paper | undefined> {
+    const doc = await PaperModel.findOneAndUpdate({ _id: id, userId }, updates, { new: true }).lean();
     if (!doc) return undefined;
     return { ...doc, id: doc._id } as any;
   }
 
-  async deletePaper(id: string): Promise<void> {
-    await PaperModel.deleteOne({ _id: id });
-    // Delete all dependent sub-resources
-    await NoteModel.deleteMany({ paperId: id });
-    await FlashcardModel.deleteMany({ paperId: id });
-    await QuizModel.deleteMany({ paperId: id });
-    await ChatSessionModel.deleteMany({ paperId: id });
-    await SavedCitationModel.deleteMany({ paperId: id });
+  async deletePaper(userId: string, id: string): Promise<void> {
+    const doc = await PaperModel.findOne({ _id: id, userId }).lean();
+    if (!doc) return;
+    
+    await PaperModel.deleteOne({ _id: id, userId });
+    // Delete all dependent sub-resources for this paper and user
+    await NoteModel.deleteMany({ paperId: id, userId });
+    await FlashcardModel.deleteMany({ paperId: id, userId });
+    await QuizModel.deleteMany({ paperId: id, userId });
+    await ChatSessionModel.deleteMany({ paperId: id, userId });
+    await SavedCitationModel.deleteMany({ paperId: id, userId });
   }
 
   // Note Operations
-  async getNotes(): Promise<Note[]> {
-    const docs = await NoteModel.find({}).lean();
+  async getNotes(userId: string): Promise<Note[]> {
+    const docs = await NoteModel.find({ userId }).lean();
     return docs.map(d => ({ ...d, id: d._id }) as any);
   }
 
-  async getNoteForPaper(paperId: string): Promise<Note | undefined> {
-    const doc = await NoteModel.findOne({ paperId }).lean();
+  async getNoteForPaper(userId: string, paperId: string): Promise<Note | undefined> {
+    const doc = await NoteModel.findOne({ paperId, userId }).lean();
     if (!doc) return undefined;
     return { ...doc, id: doc._id } as any;
   }
 
-  async createOrUpdateNote(paperId: string, title: string, content: string): Promise<Note> {
-    const existing = await NoteModel.findOne({ paperId });
+  async createOrUpdateNote(userId: string, paperId: string, title: string, content: string): Promise<Note> {
+    const existing = await NoteModel.findOne({ paperId, userId });
     if (existing) {
       existing.title = title;
       existing.content = content;
@@ -1148,6 +1102,7 @@ class ServerDatabase {
       const noteId = `n-${Date.now()}`;
       const doc = await NoteModel.create({
         _id: noteId,
+        userId,
         paperId,
         title,
         content,
@@ -1158,25 +1113,26 @@ class ServerDatabase {
   }
 
   // Flashcard Operations
-  async getFlashcards(paperId?: string): Promise<Flashcard[]> {
-    const query = paperId ? { paperId } : {};
+  async getFlashcards(userId: string, paperId?: string): Promise<Flashcard[]> {
+    const query: any = { userId };
+    if (paperId) query.paperId = paperId;
     const docs = await FlashcardModel.find(query).lean();
     return docs.map(d => ({ ...d, id: d._id }) as any);
   }
 
-  async saveFlashcards(cards: Flashcard[]): Promise<void> {
+  async saveFlashcards(userId: string, cards: Flashcard[]): Promise<void> {
     for (const card of cards) {
       await FlashcardModel.updateOne(
-        { _id: card.id },
-        { _id: card.id, ...card },
+        { _id: card.id, userId },
+        { _id: card.id, userId, ...card },
         { upsert: true }
       );
     }
   }
 
-  async updateFlashcardDifficulty(cardId: string, difficulty: 'easy' | 'medium' | 'hard' | null): Promise<Flashcard | undefined> {
-    const doc = await FlashcardModel.findByIdAndUpdate(
-      cardId,
+  async updateFlashcardDifficulty(userId: string, cardId: string, difficulty: 'easy' | 'medium' | 'hard' | null): Promise<Flashcard | undefined> {
+    const doc = await FlashcardModel.findOneAndUpdate(
+      { _id: cardId, userId },
       { difficulty, lastReviewed: new Date() },
       { new: true }
     ).lean();
@@ -1185,31 +1141,32 @@ class ServerDatabase {
   }
 
   // Quiz Operations
-  async getQuizzes(paperId?: string): Promise<Quiz[]> {
-    const query = paperId ? { paperId } : {};
+  async getQuizzes(userId: string, paperId?: string): Promise<Quiz[]> {
+    const query: any = { userId };
+    if (paperId) query.paperId = paperId;
     const docs = await QuizModel.find(query).lean();
     return docs.map(d => ({ ...d, id: d._id }) as any);
   }
 
-  async getQuiz(id: string): Promise<Quiz | undefined> {
-    const doc = await QuizModel.findById(id).lean();
+  async getQuiz(userId: string, id: string): Promise<Quiz | undefined> {
+    const doc = await QuizModel.findOne({ _id: id, userId }).lean();
     if (!doc) return undefined;
     return { ...doc, id: doc._id } as any;
   }
 
-  async saveQuiz(quiz: Quiz): Promise<Quiz> {
+  async saveQuiz(userId: string, quiz: Quiz): Promise<Quiz> {
     await QuizModel.updateOne(
-      { _id: quiz.id },
-      { _id: quiz.id, ...quiz },
+      { _id: quiz.id, userId },
+      { _id: quiz.id, userId, ...quiz },
       { upsert: true }
     );
-    const doc = await QuizModel.findById(quiz.id).lean();
+    const doc = await QuizModel.findOne({ _id: quiz.id, userId }).lean();
     return { ...doc, id: doc?._id } as any;
   }
 
-  async submitQuizScore(quizId: string, score: number): Promise<Quiz | undefined> {
-    const doc = await QuizModel.findByIdAndUpdate(
-      quizId,
+  async submitQuizScore(userId: string, quizId: string, score: number): Promise<Quiz | undefined> {
+    const doc = await QuizModel.findOneAndUpdate(
+      { _id: quizId, userId },
       { score, takenAt: new Date() },
       { new: true }
     ).lean();
@@ -1218,14 +1175,15 @@ class ServerDatabase {
   }
 
   // Chat Sessions
-  async getChats(paperId?: string): Promise<ChatSession[]> {
-    const query = paperId ? { paperId } : {};
+  async getChats(userId: string, paperId?: string): Promise<ChatSession[]> {
+    const query: any = { userId };
+    if (paperId) query.paperId = paperId;
     const docs = await ChatSessionModel.find(query).lean();
     return docs.map(d => ({ ...d, id: d._id }) as any);
   }
 
-  async getChat(id: string): Promise<ChatSession | undefined> {
-    const doc = await ChatSessionModel.findById(id).lean();
+  async getChat(userId: string, id: string): Promise<ChatSession | undefined> {
+    const doc = await ChatSessionModel.findOne({ _id: id, userId }).lean();
     if (!doc) return undefined;
     return { ...doc, id: doc._id } as any;
   }
@@ -1235,16 +1193,16 @@ class ServerDatabase {
     return doc.toJSON() as any;
   }
 
-  async saveChatMessages(chatId: string, messages: any[]): Promise<void> {
-    await ChatSessionModel.findByIdAndUpdate(
-      chatId,
+  async saveChatMessages(userId: string, chatId: string, messages: any[]): Promise<void> {
+    await ChatSessionModel.findOneAndUpdate(
+      { _id: chatId, userId },
       { messages, lastMessageAt: new Date() }
     );
   }
 
   // Literature Review
-  async getLiteratureReviews(): Promise<LiteratureReview[]> {
-    const docs = await LiteratureReviewModel.find({}).lean();
+  async getLiteratureReviews(userId: string): Promise<LiteratureReview[]> {
+    const docs = await LiteratureReviewModel.find({ userId }).lean();
     return docs.map(d => ({ ...d, id: d._id }) as any);
   }
 
@@ -1253,13 +1211,13 @@ class ServerDatabase {
     return doc.toJSON() as any;
   }
 
-  async deleteLiteratureReview(id: string): Promise<void> {
-    await LiteratureReviewModel.deleteOne({ _id: id });
+  async deleteLiteratureReview(userId: string, id: string): Promise<void> {
+    await LiteratureReviewModel.deleteOne({ _id: id, userId });
   }
 
   // Saved Citations
-  async getSavedCitations(): Promise<SavedCitation[]> {
-    const docs = await SavedCitationModel.find({}).lean();
+  async getSavedCitations(userId: string): Promise<SavedCitation[]> {
+    const docs = await SavedCitationModel.find({ userId }).lean();
     return docs.map(d => ({ ...d, id: d._id }) as any);
   }
 
@@ -1268,13 +1226,13 @@ class ServerDatabase {
     return doc.toJSON() as any;
   }
 
-  async deleteSavedCitation(id: string): Promise<void> {
-    await SavedCitationModel.deleteOne({ _id: id });
+  async deleteSavedCitation(userId: string, id: string): Promise<void> {
+    await SavedCitationModel.deleteOne({ _id: id, userId });
   }
 
   // Activity Logs
-  async getActivities(): Promise<StudyActivity[]> {
-    const docs = await StudyActivityModel.find({}).sort({ timestamp: -1 }).lean();
+  async getActivities(userId: string): Promise<StudyActivity[]> {
+    const docs = await StudyActivityModel.find({ userId }).sort({ timestamp: -1 }).lean();
     return docs.map(d => ({ ...d, id: d._id }) as any);
   }
 
@@ -1289,24 +1247,25 @@ class ServerDatabase {
   }
 
   // Dashboard Metrics
-  async getMetrics(): Promise<DashboardMetrics> {
-    const activities = await this.getActivities();
-    const papers = await this.getPapers();
-    const folders = await this.getFolders();
-    const quizzes = await this.getQuizzes();
+  async getMetrics(userId: string): Promise<DashboardMetrics> {
+    const activities = await this.getActivities(userId);
+    const papers = await this.getPapers(userId);
+    const folders = await this.getFolders(userId);
+    const quizzes = await this.getQuizzes(userId);
 
     const readActivitiesCount = activities.filter(a => a.type === 'read').length;
-    const readingHours = Math.round((readActivitiesCount * 25 + 15) / 10) / 10 + 4.2;
+    const readingHours = activities.length > 0
+      ? Math.round((readActivitiesCount * 25 + 15) / 10) / 10 + 4.2
+      : 0;
 
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     const currentDayIdx = new Date().getDay();
     const dayNamesOrdered = [...days.slice(currentDayIdx), ...days.slice(0, currentDayIdx)];
     
     const weeklyProgress = dayNamesOrdered.map((day, i) => {
-      const baseMin = [15, 30, 45, 10, 60, 90, 40][i % 7];
       return {
         day,
-        minutes: Math.min(120, baseMin + (activities.length % (i + 1)) * 5)
+        minutes: activities.length > 0 ? Math.min(120, [15, 30, 45, 10, 60, 90, 40][i % 7] + (activities.length % (i + 1)) * 5) : 0
       };
     });
 
@@ -1314,16 +1273,16 @@ class ServerDatabase {
       totalPapers: papers.length,
       totalFolders: folders.length,
       quizzesCompleted: quizzes.filter(q => q.score !== undefined).length,
-      flashcardsReviewed: activities.filter(a => a.type === 'flashcard').length * 4 + 8,
+      flashcardsReviewed: activities.filter(a => a.type === 'flashcard').length * 4,
       readingHours,
       weeklyProgress,
       recentActivity: activities.slice(0, 5)
     };
   }
 
-  // AI Config Operations
-  async getAiConfig(): Promise<{ temperature: number; chunkSize: number; persona: string }> {
-    const config = await AiConfigModel.findById('global_config').lean();
+  // AI Config Operations - Saved per-user with userId as the _id
+  async getAiConfig(userId: string): Promise<{ temperature: number; chunkSize: number; persona: string }> {
+    const config = await AiConfigModel.findById(userId).lean();
     if (!config) {
       return { temperature: 0.2, chunkSize: 4000, persona: 'scholarly' };
     }
@@ -1334,10 +1293,10 @@ class ServerDatabase {
     };
   }
 
-  async saveAiConfig(config: { temperature: number; chunkSize: number; persona: string }): Promise<void> {
+  async saveAiConfig(userId: string, config: { temperature: number; chunkSize: number; persona: string }): Promise<void> {
     await AiConfigModel.updateOne(
-      { _id: 'global_config' },
-      { _id: 'global_config', ...config },
+      { _id: userId },
+      { _id: userId, ...config },
       { upsert: true }
     );
   }
