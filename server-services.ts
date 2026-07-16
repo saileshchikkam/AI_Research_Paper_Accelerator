@@ -1,5 +1,8 @@
 import { GoogleGenAI, Type } from '@google/genai';
 
+// Store the central Gemini model name in a configuration constant for easy updates
+export const AI_MODEL = 'gemini-3.5-flash';
+
 // Lazy initialized Gemini client
 let _aiClient: GoogleGenAI | null = null;
 
@@ -39,17 +42,24 @@ export async function callGemini(
     }
   }
 
-  const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash',
-    contents: prompt,
-    config
-  });
+  try {
+    const response = await ai.models.generateContent({
+      model: AI_MODEL,
+      contents: prompt,
+      config
+    });
 
-  const text = response.text;
-  if (!text) {
-    throw new Error('Gemini API returned empty response content.');
+    const text = response.text;
+    if (!text) {
+      throw new Error('Gemini API returned empty response content.');
+    }
+    return text;
+  } catch (err: any) {
+    console.error("Gemini API error during content generation:", err);
+    // Standardize error message and format structured info without stack traces
+    const cleanErrorDetails = err.message || "Gemini API error";
+    throw new Error(`AI service temporarily unavailable. (Error details: ${cleanErrorDetails})`);
   }
-  return text;
 }
 
 export function cleanAndParseJson(text: string): any {
