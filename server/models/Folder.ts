@@ -5,7 +5,6 @@ export interface IFolder {
   name: string;
   description: string;
   color: string;
-  userId: string;
   createdAt: Date;
 }
 
@@ -15,7 +14,6 @@ const FolderSchema = new Schema<IFolder>(
     name: { type: String, required: true },
     description: { type: String, default: '' },
     color: { type: String, default: '#3B82F6' },
-    userId: { type: String, required: true },
     createdAt: { type: Date, default: Date.now }
   },
   {
@@ -40,7 +38,5 @@ const FolderSchema = new Schema<IFolder>(
     }
   }
 );
-
-FolderSchema.index({ userId: 1 });
 
 export const FolderModel = mongoose.model<IFolder>('Folder', FolderSchema);
