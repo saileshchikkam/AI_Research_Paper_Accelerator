@@ -9,7 +9,8 @@ import {
   Paper, Folder, ChatSession, Note, Flashcard, 
   Quiz, LiteratureReview, SavedCitation, User 
 } from './src/types';
-import { DocumentProcessor, AIService, callOpenRouter, cleanAndParseJson } from './server-services';
+import { Type } from '@google/genai';
+import { DocumentProcessor, AIService, callGemini, cleanAndParseJson, getGeminiClient } from './server-services';
 import { UserModel } from './server/models/User';
 import { generateToken } from './server/utils/jwt';
 import { authenticate, AuthRequest } from './server/middleware/auth';
@@ -458,14 +459,14 @@ app.post('/api/papers', async (req: Request, res: Response) => {
 
       Separate each of the 4 pages explicitly with the exact line: "--- PAGE BREAK ---". Do not add any other page dividers.`;
 
-      const responseText = await callOpenRouter([
-        { role: 'system', content: 'You are an expert research paper synthesizer. Write a highly realistic, technical, academic text simulation of a research paper.' },
-        { role: 'user', content: prompt }
-      ], { temperature: 0.5 });
+      const responseText = await callGemini(prompt, {
+        systemInstruction: 'You are an expert research paper synthesizer. Write a highly realistic, technical, academic text simulation of a research paper.',
+        temperature: 0.5
+      });
 
       extractedText = responseText || '';
     } catch (err: any) {
-      console.error('OpenRouter synthesis failed, using hardcoded placeholder', err.message);
+      console.error('Gemini synthesis failed, using hardcoded placeholder', err.message);
       extractedText = `
 # ${title}
 Authors: ${authors || 'Unknown'}
@@ -1013,16 +1014,16 @@ app.post('/api/reviews', async (req: Request, res: Response) => {
     KEY WORDS/TEXT: ${p.content.substring(0, 4000)}
     `).join('\n\n');
 
-    const prompt = `You are a professional research synthesist and senior reviewer. Compare the provided research papers and produce a comprehensive literature review comparing them across exactly these 7 dimensions.
+    const prompt = `You are a professional research synthesist and senior reviewer. Compare the provided research papers and produce a comprehensive literature review comparing them across exactly these 11 dimensions.
     Return ONLY a JSON object matching this schema:
     {
       "title": "A review title here",
       "synthesisTable": [
         {
-          "heading": "Paper Title & Authors",
+          "heading": "Authors",
           "values": {
-            "paper_id_1": "Title and authors of paper 1",
-            "paper_id_2": "Title and authors of paper 2"
+            "paper_id_1": "authors of paper 1",
+            "paper_id_2": "authors of paper 2"
           }
         }
       ],
@@ -1030,22 +1031,52 @@ app.post('/api/reviews', async (req: Request, res: Response) => {
       "gapAnalysis": "A deep analysis of current limits, unresolved contradictions, and research gaps in these topics (approx 150 words)."
     }
     
-    You MUST include EXACTLY the following 7 headings in the synthesisTable array, and for each heading, provide comparative values for ALL provided papers:
-    1. Paper Title & Authors
-    2. Research Objective / Main Goal
-    3. Scholarly Methodology / Core Approach
-    4. Dataset / Context
-    5. Key Findings / Results
-    6. Limitations / Weaknesses
-    7. Future Work
+    You MUST include EXACTLY the following 11 headings in the synthesisTable array, and for each heading, provide comparative values for ALL provided papers:
+    1. Authors
+    2. Year
+    3. Research Objective
+    4. Methodology
+    5. Dataset
+    6. Algorithms
+    7. Results
+    8. Strengths
+    9. Weaknesses
+    10. Research Gap
+    11. Future Scope
     
     Selected Papers details:
     ${papersMeta}`;
 
-    const responseText = await callOpenRouter([
-      { role: 'system', content: 'You are a professional research synthesist. Output ONLY a valid JSON object matching the requested schema. No conversational filler, no markdown block syntax wrapper.' },
-      { role: 'user', content: prompt }
-    ], { temperature: 0.3, jsonResponse: true });
+    const reviewSchema = {
+      type: Type.OBJECT,
+      properties: {
+        title: { type: Type.STRING },
+        synthesisTable: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              heading: { type: Type.STRING },
+              values: {
+                type: Type.OBJECT,
+                additionalProperties: { type: Type.STRING }
+              }
+            },
+            required: ['heading', 'values']
+          }
+        },
+        summary: { type: Type.STRING },
+        gapAnalysis: { type: Type.STRING }
+      },
+      required: ['title', 'synthesisTable', 'summary', 'gapAnalysis']
+    };
+
+    const responseText = await callGemini(prompt, {
+      systemInstruction: 'You are a professional research synthesist. Output ONLY a valid JSON object matching the requested schema.',
+      temperature: 0.3,
+      jsonResponse: true,
+      responseSchema: reviewSchema
+    });
 
     const parsed = cleanAndParseJson(responseText);
     
@@ -1073,31 +1104,38 @@ app.post('/api/reviews', async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error('Gemini Literature Review synthesis failed, generating local fallback review', err.message);
     
-    // Dynamic fallback matching the 7 requested dimensions exactly
+    // Dynamic fallback matching the 11 requested dimensions exactly
     const synthesisTable = [
       {
-        heading: 'Paper Title & Authors',
+        heading: 'Authors',
         values: papers.reduce((acc, p) => {
-          acc[p.id] = `"${p.title}" by ${p.authors}`;
+          acc[p.id] = p.authors || 'Anonymous Researcher';
           return acc;
         }, {} as Record<string, string>)
       },
       {
-        heading: 'Research Objective / Main Goal',
+        heading: 'Year',
+        values: papers.reduce((acc, p) => {
+          acc[p.id] = String(p.year || new Date().getFullYear());
+          return acc;
+        }, {} as Record<string, string>)
+      },
+      {
+        heading: 'Research Objective',
         values: papers.reduce((acc, p) => {
           acc[p.id] = p.summary?.coreProblem || `To investigate, design, and optimize robust models and paradigms for "${p.title}" to improve computational efficiency under real-time constraints.`;
           return acc;
         }, {} as Record<string, string>)
       },
       {
-        heading: 'Scholarly Methodology / Core Approach',
+        heading: 'Methodology',
         values: papers.reduce((acc, p) => {
           acc[p.id] = p.summary?.methodology || 'Quantitative experimental research utilizing neural baseline architectures, optimized layer pipelines, and custom parameterization.';
           return acc;
         }, {} as Record<string, string>)
       },
       {
-        heading: 'Dataset / Context',
+        heading: 'Dataset',
         values: papers.reduce((acc, p) => {
           acc[p.id] = p.abstract.includes('dataset') || p.abstract.includes('data')
             ? 'Evaluated on ' + p.abstract.substring(p.abstract.toLowerCase().indexOf('data'), p.abstract.toLowerCase().indexOf('data') + 120) + '...'
@@ -1106,21 +1144,42 @@ app.post('/api/reviews', async (req: Request, res: Response) => {
         }, {} as Record<string, string>)
       },
       {
-        heading: 'Key Findings / Results',
+        heading: 'Algorithms',
+        values: papers.reduce((acc, p) => {
+          acc[p.id] = 'Transformer-based multi-head self-attention mechanisms and optimized routing gates.';
+          return acc;
+        }, {} as Record<string, string>)
+      },
+      {
+        heading: 'Results',
         values: papers.reduce((acc, p) => {
           acc[p.id] = p.summary?.findings || 'Demonstrated substantial operational speed-ups and score improvements over state-of-the-art baselines, with high training stability.';
           return acc;
         }, {} as Record<string, string>)
       },
       {
-        heading: 'Limitations / Weaknesses',
+        heading: 'Strengths',
         values: papers.reduce((acc, p) => {
-          acc[p.id] = p.summary?.limitations || 'Significant resource allocation required for initial training phases; sensitive to high hyper-parameter variation and domain drift.';
+          acc[p.id] = 'High parameter efficiency, linear latency scaling with respect to context lengths, and strong zero-shot generalization capabilities.';
           return acc;
         }, {} as Record<string, string>)
       },
       {
-        heading: 'Future Work',
+        heading: 'Weaknesses',
+        values: papers.reduce((acc, p) => {
+          acc[p.id] = 'Requires high computational overhead for initial training/fine-tuning phases and demonstrates sensitivity to hyper-parameter variation.';
+          return acc;
+        }, {} as Record<string, string>)
+      },
+      {
+        heading: 'Research Gap',
+        values: papers.reduce((acc, p) => {
+          acc[p.id] = 'Does not address the challenges of streaming real-time input variations or non-stationary data shifts.';
+          return acc;
+        }, {} as Record<string, string>)
+      },
+      {
+        heading: 'Future Scope',
         values: papers.reduce((acc, p) => {
           acc[p.id] = p.insights?.futureScope?.[0] || 'Investigating lighter weight models for edge execution and exploring applicability of these layers to multi-modal video and speech systems.';
           return acc;

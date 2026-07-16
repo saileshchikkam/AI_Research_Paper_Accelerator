@@ -1,47 +1,55 @@
-const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'meta-llama/llama-3-8b-instruct:free';
+import { GoogleGenAI, Type } from '@google/genai';
 
-export async function callOpenRouter(
-  messages: { role: string; content: string }[], 
-  options: { temperature?: number; jsonResponse?: boolean } = {}
-): Promise<string> {
-  const apiKey = process.env.OPENROUTER_API_KEY || process.env.VITE_OPENROUTER_API_KEY;
-  if (!apiKey || apiKey === 'MY_OPENROUTER_API_KEY' || apiKey.trim() === '') {
-    throw new Error('OPENROUTER_API_KEY environment variable is missing or empty. Please set it in the Secrets panel.');
+// Lazy initialized Gemini client
+let _aiClient: GoogleGenAI | null = null;
+
+export function getGeminiClient(): GoogleGenAI {
+  if (!_aiClient) {
+    const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+    if (!apiKey || apiKey === 'MY_GEMINI_API_KEY' || apiKey.trim() === '') {
+      throw new Error('GEMINI_API_KEY is missing. Please configure it in your Secrets.');
+    }
+    _aiClient = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        }
+      }
+    });
   }
+  return _aiClient;
+}
 
-  const payload: any = {
-    model: OPENROUTER_MODEL,
-    messages: messages,
+export async function callGemini(
+  prompt: string,
+  options: { systemInstruction?: string; temperature?: number; jsonResponse?: boolean; responseSchema?: any } = {}
+): Promise<string> {
+  const ai = getGeminiClient();
+  const config: any = {
     temperature: options.temperature !== undefined ? options.temperature : 0.3,
   };
-
+  if (options.systemInstruction) {
+    config.systemInstruction = options.systemInstruction;
+  }
   if (options.jsonResponse) {
-    payload.response_format = { type: 'json_object' };
+    config.responseMimeType = 'application/json';
+    if (options.responseSchema) {
+      config.responseSchema = options.responseSchema;
+    }
   }
 
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-      'HTTP-Referer': 'https://ai.studio/build',
-      'X-Title': 'ResearchMind AI'
-    },
-    body: JSON.stringify(payload)
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.5-flash',
+    contents: prompt,
+    config
   });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error(`OpenRouter API error (Status ${response.status}):`, errorText);
-    throw new Error(`OpenRouter API returned error status ${response.status}: ${errorText}`);
+  const text = response.text;
+  if (!text) {
+    throw new Error('Gemini API returned empty response content.');
   }
-
-  const data: any = await response.json();
-  const content = data?.choices?.[0]?.message?.content;
-  if (!content) {
-    throw new Error('OpenRouter API returned empty response content.');
-  }
-  return content;
+  return text;
 }
 
 export function cleanAndParseJson(text: string): any {
@@ -262,14 +270,35 @@ export class AIService {
         ${doc.cleanedContent.substring(0, 20000)}
         `;
 
+        const summarizeSchema = {
+          type: Type.OBJECT,
+          properties: {
+            executiveSummary: { type: Type.STRING },
+            detailedSummary: { type: Type.STRING },
+            simpleSummary: { type: Type.STRING },
+            bulletSummary: { type: Type.ARRAY, items: { type: Type.STRING } },
+            keyFindings: { type: Type.ARRAY, items: { type: Type.STRING } },
+            methodology: { type: Type.STRING },
+            results: { type: Type.STRING },
+            limitations: { type: Type.ARRAY, items: { type: Type.STRING } },
+            futureWork: { type: Type.ARRAY, items: { type: Type.STRING } }
+          },
+          required: [
+            'executiveSummary', 'detailedSummary', 'simpleSummary', 'bulletSummary',
+            'keyFindings', 'methodology', 'results', 'limitations', 'futureWork'
+          ]
+        };
+
         try {
-          const responseText = await callOpenRouter([
-            { role: 'system', content: 'You are a high-fidelity academic analyzer. You must output ONLY a valid JSON object matching the requested schema. No conversational filler, no markdown block syntax wrapper.' },
-            { role: 'user', content: prompt }
-          ], { temperature: 0.2, jsonResponse: true });
+          const responseText = await callGemini(prompt, {
+            systemInstruction: 'You are a high-fidelity academic analyzer. You must output ONLY a valid JSON object matching the requested schema.',
+            temperature: 0.2,
+            jsonResponse: true,
+            responseSchema: summarizeSchema
+          });
           return cleanAndParseJson(responseText);
         } catch (err: any) {
-          console.error("OpenRouter summarize failed, returning fallback", err.message);
+          console.error("Gemini summarize failed, returning fallback", err.message);
           return {
             executiveSummary: `This paper titled "${doc.title}" explores the fundamental paradigms and practical implementations within this research area.`,
             detailedSummary: `An in-depth analysis of "${doc.title}" reveals key methodologies, algorithmic pipelines, and structural optimizations. We evaluate the performance metrics, scaling characteristics, and context representations over rigorous test benchmarks.`,
@@ -331,17 +360,17 @@ export class AIService {
         }));
 
         try {
-          const responseText = await callOpenRouter([
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: promptContext }
-          ], { temperature: aiConfig?.temperature !== undefined ? aiConfig.temperature : 0.1 });
+          const responseText = await callGemini(promptContext, {
+            systemInstruction: systemPrompt,
+            temperature: aiConfig?.temperature !== undefined ? aiConfig.temperature : 0.1
+          });
 
           return {
             text: responseText || "I was unable to formulate a grounded response.",
             sources
           };
         } catch (err: any) {
-          console.error("OpenRouter chat failed, returning error message", err.message);
+          console.error("Gemini chat failed, returning error message", err.message);
           return {
             text: `I'm sorry, I encountered an issue while retrieving information using the AI service. Details: ${err.message}`,
             sources: []
@@ -377,11 +406,27 @@ export class AIService {
         ${doc.cleanedContent.substring(0, 15000)}
         `;
 
+        const flashcardsSchema = {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              question: { type: Type.STRING },
+              answer: { type: Type.STRING },
+              difficulty: { type: Type.STRING },
+              category: { type: Type.STRING }
+            },
+            required: ['question', 'answer', 'difficulty', 'category']
+          }
+        };
+
         try {
-          const responseText = await callOpenRouter([
-            { role: 'system', content: 'You must output ONLY a valid JSON array of exactly 6 flashcard objects. No conversational filler, no markdown block syntax wrapper.' },
-            { role: 'user', content: prompt }
-          ], { temperature: 0.4, jsonResponse: true });
+          const responseText = await callGemini(prompt, {
+            systemInstruction: 'You must output ONLY a valid JSON array of exactly 6 flashcard objects. Follow the requested difficulty distribution (2 easy, 2 medium, 2 hard).',
+            temperature: 0.4,
+            jsonResponse: true,
+            responseSchema: flashcardsSchema
+          });
           const parsed = cleanAndParseJson(responseText);
           if (Array.isArray(parsed) && parsed.length >= 6) {
             return parsed;
@@ -399,7 +444,7 @@ export class AIService {
           }
           throw new Error("Invalid array structure or too few cards");
         } catch (err: any) {
-          console.error("OpenRouter flashcards failed, returning fallback", err.message);
+          console.error("Gemini flashcards failed, returning fallback", err.message);
           return [
             {
               question: `What is the core objective of "${doc.title}"?`,
@@ -463,18 +508,41 @@ export class AIService {
         ${doc.cleanedContent.substring(0, 15000)}
         `;
 
+        const quizSchema = {
+          type: Type.OBJECT,
+          properties: {
+            title: { type: Type.STRING },
+            questions: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  question: { type: Type.STRING },
+                  options: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  answerIndex: { type: Type.INTEGER },
+                  explanation: { type: Type.STRING }
+                },
+                required: ['question', 'options', 'answerIndex', 'explanation']
+              }
+            }
+          },
+          required: ['title', 'questions']
+        };
+
         try {
-          const responseText = await callOpenRouter([
-            { role: 'system', content: 'You must output ONLY a valid JSON object matching the requested schema. No conversational filler, no markdown block syntax wrapper.' },
-            { role: 'user', content: prompt }
-          ], { temperature: 0.3, jsonResponse: true });
+          const responseText = await callGemini(prompt, {
+            systemInstruction: 'You must output ONLY a valid JSON object matching the requested schema. No conversational filler, no markdown block syntax wrapper.',
+            temperature: 0.3,
+            jsonResponse: true,
+            responseSchema: quizSchema
+          });
           const parsed = cleanAndParseJson(responseText);
           if (parsed && Array.isArray(parsed.questions) && parsed.questions.length >= 5) {
             return parsed;
           }
           throw new Error("Invalid quiz structure or too few questions generated");
         } catch (err: any) {
-          console.error("OpenRouter quiz failed, returning fallback", err.message);
+          console.error("Gemini quiz failed, returning fallback", err.message);
           return {
             title: `${doc.title} Comprehensive Quiz`,
             questions: [
@@ -562,14 +630,47 @@ export class AIService {
         ${doc.cleanedContent.substring(0, 12000)}
         `;
 
+        const mindmapSchema = {
+          type: Type.OBJECT,
+          properties: {
+            nodes: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  id: { type: Type.STRING },
+                  label: { type: Type.STRING },
+                  group: { type: Type.STRING },
+                  description: { type: Type.STRING }
+                },
+                required: ['id', 'label', 'group', 'description']
+              }
+            },
+            links: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  source: { type: Type.STRING },
+                  target: { type: Type.STRING }
+                },
+                required: ['source', 'target']
+              }
+            }
+          },
+          required: ['nodes', 'links']
+        };
+
         try {
-          const responseText = await callOpenRouter([
-            { role: 'system', content: 'You must output ONLY a valid JSON object matching the requested schema. No conversational filler, no markdown block syntax wrapper.' },
-            { role: 'user', content: prompt }
-          ], { temperature: 0.2, jsonResponse: true });
+          const responseText = await callGemini(prompt, {
+            systemInstruction: 'You must output ONLY a valid JSON object matching the requested schema. No conversational filler, no markdown block syntax wrapper.',
+            temperature: 0.2,
+            jsonResponse: true,
+            responseSchema: mindmapSchema
+          });
           return cleanAndParseJson(responseText);
         } catch (err: any) {
-          console.error("OpenRouter mindmap failed, returning fallback", err.message);
+          console.error("Gemini mindmap failed, returning fallback", err.message);
           return {
             nodes: [
               { id: "node-1", label: doc.title.substring(0, 40) + "...", group: "title", description: "The central paper under review" },
@@ -602,14 +703,27 @@ export class AIService {
         ${doc.cleanedContent.substring(0, 15000)}
         `;
 
+        const insightSchema = {
+          type: Type.OBJECT,
+          properties: {
+            critiques: { type: Type.ARRAY, items: { type: Type.STRING } },
+            methodologyVal: { type: Type.STRING },
+            extensionPaths: { type: Type.ARRAY, items: { type: Type.STRING } },
+            realWorldImpact: { type: Type.STRING }
+          },
+          required: ['critiques', 'methodologyVal', 'extensionPaths', 'realWorldImpact']
+        };
+
         try {
-          const responseText = await callOpenRouter([
-            { role: 'system', content: 'You must output ONLY a valid JSON object matching the requested schema. No conversational filler, no markdown block syntax wrapper.' },
-            { role: 'user', content: prompt }
-          ], { temperature: 0.3, jsonResponse: true });
+          const responseText = await callGemini(prompt, {
+            systemInstruction: 'You must output ONLY a valid JSON object matching the requested schema. No conversational filler, no markdown block syntax wrapper.',
+            temperature: 0.3,
+            jsonResponse: true,
+            responseSchema: insightSchema
+          });
           return cleanAndParseJson(responseText);
         } catch (err: any) {
-          console.error("OpenRouter insight failed, returning fallback", err.message);
+          console.error("Gemini insight failed, returning fallback", err.message);
           return {
             critiques: [
               "Initial model training phases require heavy resource allocation which may limit edge adaptations.",
