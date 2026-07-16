@@ -4,38 +4,16 @@ dotenv.config();
 
 import express, { Request, Response } from 'express';
 import path from 'path';
-import { GoogleGenAI, Type } from '@google/genai';
 import { db } from './server-db';
 import { 
   Paper, Folder, ChatSession, Note, Flashcard, 
   Quiz, LiteratureReview, SavedCitation, User 
 } from './src/types';
-import { DocumentProcessor, AIService } from './server-services';
+import { DocumentProcessor, AIService, callOpenRouter, cleanAndParseJson } from './server-services';
 import { UserModel } from './server/models/User';
 import { generateToken } from './server/utils/jwt';
 import { authenticate, AuthRequest } from './server/middleware/auth';
 import { connectDB } from './server/config/database';
-
-// Lazy-initialized Gemini API client to prevent crash if key is missing on start
-let _aiClient: GoogleGenAI | null = null;
-
-function getGeminiClient(): GoogleGenAI {
-  if (!_aiClient) {
-    const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
-    if (!apiKey || apiKey === 'MY_GEMINI_API_KEY' || apiKey.trim() === '') {
-      throw new Error('GEMINI_API_KEY environment variable is missing or empty. Please set it in the Secrets panel.');
-    }
-    _aiClient = new GoogleGenAI({
-      apiKey,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build',
-        }
-      }
-    });
-  }
-  return _aiClient;
-}
 
 const app = express();
 const PORT = 3000;
@@ -412,7 +390,6 @@ app.post('/api/papers', async (req: Request, res: Response) => {
   
   if (isShortOrUnstructured) {
     try {
-      const ai = getGeminiClient();
       const prompt = `You are an expert research paper synthesizer. Write a highly realistic, technical, academic text simulation of a research paper.
       The paper title is "${title}", written by "${authors || 'Anonymous'}" published in "${journal || 'Academic Proceedings'}" in ${year || 2026}.
       ${extractedText.trim() ? `Use the following provided context or abstract as inspiration:\n"${extractedText.trim()}"\n` : ''}
@@ -481,14 +458,14 @@ app.post('/api/papers', async (req: Request, res: Response) => {
 
       Separate each of the 4 pages explicitly with the exact line: "--- PAGE BREAK ---". Do not add any other page dividers.`;
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.5-flash',
-        contents: prompt,
-      });
+      const responseText = await callOpenRouter([
+        { role: 'system', content: 'You are an expert research paper synthesizer. Write a highly realistic, technical, academic text simulation of a research paper.' },
+        { role: 'user', content: prompt }
+      ], { temperature: 0.5 });
 
-      extractedText = response.text || '';
+      extractedText = responseText || '';
     } catch (err: any) {
-      console.error('Gemini synthesis failed, using hardcoded placeholder', err.message);
+      console.error('OpenRouter synthesis failed, using hardcoded placeholder', err.message);
       extractedText = `
 # ${title}
 Authors: ${authors || 'Unknown'}
@@ -1028,7 +1005,6 @@ app.post('/api/reviews', async (req: Request, res: Response) => {
   }
 
   try {
-    const ai = getGeminiClient();
     const papersMeta = papers.map(p => `
     PAPER ID: ${p.id}
     TITLE: ${p.title}
@@ -1066,52 +1042,12 @@ app.post('/api/reviews', async (req: Request, res: Response) => {
     Selected Papers details:
     ${papersMeta}`;
 
-    // Enforce response schema
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.5-flash',
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            title: { type: Type.STRING },
-            synthesisTable: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  heading: { type: Type.STRING },
-                  values: { type: Type.OBJECT } // record of paperId -> value
-                },
-                required: ['heading', 'values']
-              }
-            },
-            summary: { type: Type.STRING },
-            gapAnalysis: { type: Type.STRING }
-          },
-          required: ['title', 'synthesisTable', 'summary', 'gapAnalysis']
-        }
-      }
-    });
+    const responseText = await callOpenRouter([
+      { role: 'system', content: 'You are a professional research synthesist. Output ONLY a valid JSON object matching the requested schema. No conversational filler, no markdown block syntax wrapper.' },
+      { role: 'user', content: prompt }
+    ], { temperature: 0.3, jsonResponse: true });
 
-    let parsed: any;
-    try {
-      const cleanText = response.text?.replace(/```json\s*/i, '').replace(/```\s*$/, '').trim() || '{}';
-      parsed = JSON.parse(cleanText);
-    } catch (parseErr) {
-      console.warn("Direct JSON parsing failed, trying regex extraction", parseErr);
-      const match = response.text?.match(/\{[\s\S]*\}/);
-      if (match) {
-        try {
-          parsed = JSON.parse(match[0]);
-        } catch (e) {
-          throw new Error("Could not parse Gemini JSON response");
-        }
-      } else {
-        throw new Error("No JSON object found in Gemini response");
-      }
-    }
+    const parsed = cleanAndParseJson(responseText);
     
     const review: LiteratureReview = {
       id: `lr-${Date.now()}`,
