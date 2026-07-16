@@ -16,7 +16,6 @@ export interface IMessage {
 
 export interface IChatSession {
   _id: string;
-  userId: string;
   paperId: string;
   title: string;
   lastMessageAt: Date;
@@ -40,7 +39,6 @@ const MessageSchema = new Schema<IMessage>({
 const ChatSessionSchema = new Schema<IChatSession>(
   {
     _id: { type: String, required: true },
-    userId: { type: String, required: true },
     paperId: { type: String, required: true },
     title: { type: String, required: true },
     lastMessageAt: { type: Date, default: Date.now },
@@ -69,7 +67,6 @@ const ChatSessionSchema = new Schema<IChatSession>(
   }
 );
 
-ChatSessionSchema.index({ userId: 1 });
 ChatSessionSchema.index({ paperId: 1 });
 
 export const ChatSessionModel = mongoose.model<IChatSession>('ChatSession', ChatSessionSchema);

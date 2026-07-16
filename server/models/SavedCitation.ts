@@ -2,7 +2,6 @@ import mongoose, { Schema } from 'mongoose';
 
 export interface ISavedCitation {
   _id: string;
-  userId: string;
   paperId: string;
   paperTitle: string;
   format: 'apa' | 'mla' | 'chicago' | 'harvard' | 'bibtex';
@@ -13,7 +12,6 @@ export interface ISavedCitation {
 const SavedCitationSchema = new Schema<ISavedCitation>(
   {
     _id: { type: String, required: true },
-    userId: { type: String, required: true },
     paperId: { type: String, required: true },
     paperTitle: { type: String, required: true },
     format: { 
@@ -47,7 +45,6 @@ const SavedCitationSchema = new Schema<ISavedCitation>(
   }
 );
 
-SavedCitationSchema.index({ userId: 1 });
 SavedCitationSchema.index({ paperId: 1 });
 
 export const SavedCitationModel = mongoose.model<ISavedCitation>('SavedCitation', SavedCitationSchema);

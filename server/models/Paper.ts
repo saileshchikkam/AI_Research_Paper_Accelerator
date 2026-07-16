@@ -2,7 +2,6 @@ import mongoose, { Schema } from 'mongoose';
 
 export interface IPaper {
   _id: string;
-  userId: string;
   title: string;
   authors: string;
   journal: string;
@@ -31,7 +30,6 @@ export interface IPaper {
 const PaperSchema = new Schema<IPaper>(
   {
     _id: { type: String, required: true },
-    userId: { type: String, required: true },
     title: { type: String, required: true },
     authors: { type: String, default: '' },
     journal: { type: String, default: '' },
@@ -79,7 +77,6 @@ const PaperSchema = new Schema<IPaper>(
   }
 );
 
-PaperSchema.index({ userId: 1 });
 PaperSchema.index({ title: 'text', abstract: 'text' });
 PaperSchema.index({ folderId: 1 });
 

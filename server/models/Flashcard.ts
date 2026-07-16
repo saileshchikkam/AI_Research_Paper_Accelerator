@@ -2,7 +2,6 @@ import mongoose, { Schema } from 'mongoose';
 
 export interface IFlashcard {
   _id: string;
-  userId: string;
   paperId: string;
   question: string;
   answer: string;
@@ -14,7 +13,6 @@ export interface IFlashcard {
 const FlashcardSchema = new Schema<IFlashcard>(
   {
     _id: { type: String, required: true },
-    userId: { type: String, required: true },
     paperId: { type: String, required: true },
     question: { type: String, required: true },
     answer: { type: String, required: true },
@@ -49,7 +47,6 @@ const FlashcardSchema = new Schema<IFlashcard>(
   }
 );
 
-FlashcardSchema.index({ userId: 1 });
 FlashcardSchema.index({ paperId: 1 });
 
 export const FlashcardModel = mongoose.model<IFlashcard>('Flashcard', FlashcardSchema);
